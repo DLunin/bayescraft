@@ -1,0 +1,1 @@
+from .normal_inverse_gamma import *
