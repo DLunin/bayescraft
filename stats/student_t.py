@@ -6,75 +6,80 @@ from scipy.special import gamma
 from scipy.stats._multivariate import _process_parameters, _squeeze_output
 from ._multivariate import *
 import numpy as np
+from numpy.linalg import inv, cholesky, det
 from numpy import exp
 from sys import float_info
 
 class multivariate_student_t_gen(rv_multivariate_continuous):
     r"""
-    A Normal Inverse Gamma (NIG) random variable.
+    Mutivariate Student t-distribution random variable.
     """
 
     def __init__(self):
-        self._mnorm = multivariate_normal
-        self._invgamma = invgamma
+        super().__init__()
 
-    def __call__(self, w_0=None, V_0=None, a_0=0, b_0=0):
-        return multivariate_student_t_frozen(w_0=w_0, V_0=V_0, a_0=a_0, b_0=b_0)
+    def __call__(self, mean, shape, scale):
+        return multivariate_student_t_frozen(mean=mean, shape=shape, scale=scale)
 
     def _invgamma_pdf(self, x, a, scale):
         return (x**(-(a + 1))) * exp(-scale/x) / gamma(a)
 
-    def _pdf(self, w, var, w_0, V_0, a_0, b_0):
-        return self._mnorm.pdf(w, mean=w_0, cov=var*V_0)*self._invgamma.pdf(var, a=a_0, scale=b_0)
+    def _pdf(self, x, mean, scale, shape, dim):
+        part1 = (gamma(shape / 2. + dim / 2.) / gamma(shape / 2.))
+        part2 = (1 / det(scale)) / ((shape*np.pi)**(dim / 2))
+        part3_exp = 1 + ((1 / shape)*(x - mean).T*inv(scale)*(x - mean))[0,0]
+        part3 = part3_exp ** (-(shape + dim)/2)
+        return part1 * part2 * part3
 
-    def pdf(self, x, w_0, V_0, a_0, b_0):
-        dim, w_0, V_0 = _process_parameters(None, w_0, V_0)
-        return self._pdf(x[:-1], x[-1], w_0, V_0, a_0, b_0)
+    def pdf(self, x, mean, scale, shape):
+        dim, mean, scale = _process_parameters(None, mean, scale)
+        x = np.matrix(x, copy=False).T
+        mean = np.matrix(mean, copy=False).T
+        return self._pdf(x, mean=mean, scale=scale, shape=shape, dim=dim)
 
-    def logpdf(self, x, w_0, V_0, a_0, b_0):
-        var = x[-1]
-        w = x[:-1]
-        return self._mnorm.logpdf(w, mean=w_0, cov=var*V_0) + self._invgamma.logpdf(var, a=a_0, scale=b_0)
+    def cdf(self, x, mean, scale, shape):
+        dim, mean, scale = _process_parameters(None, mean, scale)
+        x = np.matrix(x, copy=False).T
+        mean = np.matrix(mean, copy=False).T
+        def temp(*args):
+            result = self._pdf(np.matrix(args).T, mean=mean, scale=scale, shape=shape, dim=dim)
+            return result
 
-    def cdf(self, x, w_0, V_0, a_0, b_0):
-        dim, w_0, V_0 = _process_parameters(None, w_0, V_0)
-        var = x[-1]
-        w = x[:-1]
-        return sp.integrate.nquad(lambda *args: self._pdf(np.array(args[:-1]), args[-1], w_0, V_0, a_0, b_0),
-                                  [(-sp.inf, x) for x in w] + [(0, var)])[0]
+        return sp.integrate.nquad(lambda *args: self._pdf(np.array(args), mean, scale, shape, dim),
+        # return sp.integrate.nquad(temp,
+                                  [(-sp.inf, x_i) for x_i in x])[0]
 
-    def rvs(self, w_0, V_0, a_0, b_0, size=1):
-        dim, w_0, V_0 = _process_parameters(None, w_0, V_0)
-        ig = self._invgamma.rvs(a=a_0, scale=b_0, size=size)
-        result = np.vstack([np.append(self._mnorm.rvs(mean=w_0, cov=var*V_0, size=1), var) for var in ig])
+    def rvs(self, mean, scale, shape, size=1):
+        raise NotImplementedError()
+        dim, mean, scale = _process_parameters(None, mean, scale)
+        result = None
         return _squeeze_output(result)
 
-    def entropy(self, w_0, V_0, a_0, b_0):
+    def entropy(self, mean, scale, shape):
         raise NotImplementedError()
 
 multivariate_student_t = multivariate_student_t_gen()
 
-def frozen(distribution):
-    class frozen_rv(object):
-        def __init__(self, **params):
-            self.__dict__.update(params)
-            self._param_list = list(params.keys())
+class multivariate_student_t_frozen(object):
+    def __init__(self, mean, scale, shape):
+        self.dim, self.mean, self.scale = _process_parameters(None, mean, scale)
+        self.shape = shape
+        self._student_t = multivariate_student_t_gen()
 
-        def logpdf(self, x):
-            return self._nig.logpdf(x, **{p: getattr(self, p) for p in self._param_list})
+    def logpdf(self, x):
+        return self._student_t.logpdf(x, mean=self.mean, scale=self.scale, shape=self.shape)
 
-        def pdf(self, x):
-            return self._nig.pdf(x, **{p: getattr(self, p) for p in self._param_list})
+    def pdf(self, x):
+        return self._student_t.pdf(x, mean=self.mean, scale=self.scale, shape=self.shape)
 
-        def logcdf(self, x):
-            return self._nig.logcdf(x, **{p: getattr(self, p) for p in self._param_list})
+    def logcdf(self, x):
+        return self._student_t.logcdf(x, mean=self.mean, scale=self.scale, shape=self.shape)
 
-        def cdf(self, x):
-            return self._nig.cdf(x, **{p: getattr(self, p) for p in self._param_list})
+    def cdf(self, x):
+        return self._student_t.cdf(x, mean=self.mean, scale=self.scale, shape=self.shape)
 
-        def rvs(self, size=1):
-            return self._nig.rvs(size=size, **{p: getattr(self, p) for p in self._param_list})
+    def rvs(self, size=1):
+        return self._student_t.rvs(mean=self.mean, scale=self.scale, shape=self.shape, size=size)
 
-        def entropy(self):
-            return self._nig.entropy(**{p: getattr(self, p) for p in self._param_list})
-    return frozen_rv
+    def entropy(self):
+        return self._student_t.entropy(mean=self.mean, scale=self.scale, shape=self.shape)

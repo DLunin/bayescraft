@@ -9,22 +9,9 @@ from scipy.stats._multivariate import _process_parameters, _squeeze_output
 import numpy as np
 from numpy import exp
 from sys import float_info
+from ._multivariate import *
 
-class rv_multivariate_continuous:
-    def __init__(self):
-        pass
-
-    def pdf(self, x, **params):
-        return derivative(self.cdf(x, **params))
-
-    def cdf(self, x, **params):
-        return integrate(self.pdf(x, **params))
-
-    def logcdf(self, *args, **kwargs):
-        return np.log(self.cdf(*args, **kwargs))
-
-    def logcdf(self, *args, **kwargs):
-        return np.log(self.cdf(*args, **kwargs))
+normal_inverse_gamma = None
 
 class normal_inverse_gamma_gen(rv_multivariate_continuous):
     r"""
@@ -32,6 +19,7 @@ class normal_inverse_gamma_gen(rv_multivariate_continuous):
     """
 
     def __init__(self):
+        super().__init__()
         self._mnorm = multivariate_normal
         self._invgamma = invgamma
 
@@ -102,7 +90,3 @@ class normal_inverse_gamma_frozen(object):
         return self._nig.entropy(w_0=self.w_0, V_0=self.V_0, a_0=self.a_0, b_0=self.b_0)
 
 # print(normal_inverse_gamma.cdf(np.array([inf, inf]), np.zeros(1), np.ones(1), 1, 1))
-
-if __name__ == "__main__":
-    import doctest
-    doctest.testmod()
