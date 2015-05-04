@@ -83,3 +83,11 @@ class multivariate_student_t_frozen(object):
 
     def entropy(self):
         return self._student_t.entropy(mean=self.mean, scale=self.scale, shape=self.shape)
+
+    @property
+    def mode(self):
+        return self.mean
+
+    @property
+    def covariance(self):
+        return (self.shape / (self.shape - 2)) * self.scale
