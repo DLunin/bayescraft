@@ -75,7 +75,7 @@ class LinearRegression:
         self.b_N = b_N
         self.a_N = a_N
         self.V_N = V_N
-        self.var = invgamma(a=a_N, scale=b_N)
+        self.var = stats.invgamma(a=a_N, scale=b_N)
         self.w = multivariate_student_t(mean=w_N, scale=(b_N / a_N)*V_N, shape=2*a_N)
         self.posterior_predictive = lambda X: multivariate_student_t(mean=X*w_N, scale=(b_N / a_N)*(np.eye(X.shape[0]) + X*V_N*X.T))
         

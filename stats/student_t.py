@@ -36,18 +36,18 @@ class multivariate_student_t_gen(rv_multivariate_continuous):
     def _pdf(self, x, mean, scale, shape, dim):
         eps = 1e-9
 
-        part1 = (gamma(shape / 2. + dim / 2.) / gamma(shape / 2.))
+        #part1 = (gamma(shape / 2. + dim / 2.) / gamma(shape / 2.))
         part1_ln = gammaln(shape / 2. + dim / 2.) - gammaln(shape / 2.)
         #print(abs(part1 - exp(part1_ln)))
         #assert abs(part1 - exp(part1_ln)) < eps
 
-        part2 = (1 / det(scale)) / ((shape*np.pi)**(dim / 2))
+        #part2 = (1 / det(scale)) / ((shape*np.pi)**(dim / 2))
         part2_ln = -log(det(scale)) - (log(shape*np.pi)*(dim / 2))
         #print(abs(part1 - exp(part1_ln)))
         #assert abs(part2 - exp(part2_ln)) < eps
 
         part3_exp = 1 + ((1 / shape)*(x - mean).T*inv(scale)*(x - mean))[0,0]
-        part3 = part3_exp ** (-(shape + dim)/2)
+        #part3 = part3_exp ** (-(shape + dim)/2)
         part3_ln = log(part3_exp) * (-(shape + dim)/2)
         #print(abs(part1 - exp(part1_ln)))
         #assert abs(part3 - exp(part3_ln)) < eps
