@@ -1,1 +1,1 @@
-from .bayesian_linear_regression import LinearRegression, prettify_data
+from .bayesian_linear_regression import *

@@ -7,34 +7,36 @@ import sys
 import sklearn.linear_model as linear
 import scipy.stats as stats
 from .stats import *
-from collections import ChainMap
+from .utils.data_formats import *
 import scipy
 
-def prettify_data(X, y=None):
-    X = np.array(X)
-    if len(X.shape) == 1:
-        X = X.reshape((len(X), 1))
-    X = np.matrix(X, copy=False)
-    if y is not None:
-        y = np.matrix(y)
-        if y.shape[0] == 1 and y.shape[1] != 1:
-            y = y.T
-        assert X.shape[0] == y.shape[0]
-        return X, y
-    else:
-        return X
+# def prettify_data(X, y=None):
+#     X = np.array(X)
+#     if len(X.shape) == 1:
+#         X = X.reshape((len(X), 1))
+#     X = np.matrix(X, copy=False)
+#     if y is not None:
+#         y = np.matrix(y)
+#         if y.shape[0] == 1 and y.shape[1] != 1:
+#             y = y.T
+#         assert X.shape[0] == y.shape[0]
+#         return X, y
+#     else:
+#         return X
         
 class LinearRegression:
     def __init__(self, variance=None, tau=sys.float_info.max, w_0=None, V_0=None, a_0=None, b_0=None):
         self.variance = variance
         self.tau = tau
-        self.w_0 = w_0
-        self.V_0 = V_0
+        self.w_0 = to_column_vector(w_0)
+        self.V_0 = to_matrix(V_0)
         self.a_0 = a_0
         self.b_0 = b_0
     
     def fit(self, X, y):
-        X, y = prettify_data(X, y)
+        X = to_matrix(X)
+        y = to_column_vector(y)
+
         xdim = X.shape[1]
         n = X.shape[0]
         if self.V_0 is None:
@@ -47,7 +49,7 @@ class LinearRegression:
             return self._fit_with_known_variance(X, y, self.variance, w_0=self.w_0, V_0=self.V_0)
 
     def predict(self, X):
-        X = prettify_data(X)
+        X = to_matrix(X)
         if type(self.w) is stats.multivariate_normal:
             return np.array([self._predict_normal(x) for x in X])
         else: # unknown variance scenario
@@ -69,7 +71,7 @@ class LinearRegression:
         V_N = inv(inv(V_0) + X.T*X)
         w_N = V_N*(inv(V_0)*w_0 + X.T*y)
         a_N = self.a_0 + n/2
-        b_N = self.b_0 + 0.5*(w_0.T*inv(V_0)*w_0 + y.T*y - w_N.T*inv(V_N)*w_N)
+        b_N = to_scalar(self.b_0 + 0.5*(w_0.T*inv(V_0)*w_0 + y.T*y - w_N.T*inv(V_N)*w_N))
         self.w_var = normal_inverse_gamma(w_0=w_N, V_0=V_N, a_0=a_N, b_0=b_N)
         self.w_N = w_N
         self.b_N = b_N
@@ -77,10 +79,21 @@ class LinearRegression:
         self.V_N = V_N
         self.var = stats.invgamma(a=a_N, scale=b_N)
         self.w = multivariate_student_t(mean=w_N, scale=(b_N / a_N)*V_N, shape=2*a_N)
-        self.posterior_predictive = lambda X: multivariate_student_t(mean=X*w_N, scale=(b_N / a_N)*(np.eye(X.shape[0]) + X*V_N*X.T))
+        mean=X*w_N
+        scale=(b_N / a_N)*(np.eye(X.shape[0]) + X*V_N*X.T)
+        shape=2*a_N
+        self.posterior_predictive = lambda X: multivariate_student_t(mean=X*w_N, scale=(b_N / a_N)*(np.eye(X.shape[0]) + X*V_N*X.T), shape=2*a_N)
         
     def _predict_normal(self, x):
         w_N = self.w.mean()
         V_N = self.w.var()
         variance_N = self.variance
         return stats.multivariate_normal(mean=w_N.T*x, cov=variance_N)
+
+def g_prior(X, g=1e+50):
+    X = to_matrix(X)
+    dim = X.shape[1]
+    a_0 = b_0 = 0
+    w_0 = np.zeros((dim, 1))
+    V_0 = g*(inv(X.T*X))
+    return LinearRegression(w_0=w_0, V_0=V_0, a_0=a_0, b_0=b_0)

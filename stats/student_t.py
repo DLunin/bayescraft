@@ -3,12 +3,19 @@ from scipy.stats import *
 from scipy import stats, integrate
 import scipy as sp
 from scipy.special import gamma, gammaln
-from scipy.stats._multivariate import _process_parameters, _squeeze_output
+from scipy.stats._multivariate import _squeeze_output
 from ._multivariate import *
 import numpy as np
 from numpy.linalg import inv, cholesky, det
 from numpy import exp, log
+from ..utils.data_formats import *
 from sys import float_info
+
+def _process_parameters(dim, vec, mat):
+    vec = to_column_vector(vec)
+    mat = to_matrix(mat)
+    dim = vec.shape[0]
+    return dim, vec, mat
 
 class multivariate_student_t_gen(rv_multivariate_continuous):
     r"""
@@ -119,7 +126,7 @@ class multivariate_student_t_frozen(object):
 
     @property
     def mode(self):
-        return self.mean
+        return self._mean
 
     @property
     def covariance(self):

@@ -65,7 +65,11 @@ normal_inverse_gamma = normal_inverse_gamma_gen()
 
 class normal_inverse_gamma_frozen(object):
     def __init__(self, w_0, V_0, a_0, b_0):
-        self.wdim, self.w_0, self.V_0 = _process_parameters(None, w_0, V_0)
+        #self.wdim, self.w_0, self.V_0 = _process_parameters(None, w_0, V_0)
+        self.w_0 = w_0
+        self.V_0 = V_0
+        self.wdim = w_0.shape[0]
+
         self._nig = normal_inverse_gamma_gen()
         self.a_0 = a_0
         self.b_0 = b_0

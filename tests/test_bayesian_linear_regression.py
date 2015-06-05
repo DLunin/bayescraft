@@ -1,22 +1,33 @@
 import bayescraft as b
 import numpy as np
+from numpy import sqrt
 import scipy as sp
+from scipy import stats
 from scipy.linalg import inv, pinv
+import matplotlib.pyplot as plt
+
+def generate_data(n, dim=1, x_range=(0, 10), coef_range=(1, 10), noise_var=1):
+    global tick
+    X, y = [], []
+
+    coef_mid = (coef_range[0] + coef_range[1]) / 2.
+    coef_range = coef_range[1] - coef_range[0]
+    x_mid = (x_range[0] + x_range[1]) / 2.
+    x_range = x_range[1] - x_range[0]
+
+    coef = (np.random.rand(dim) - 0.5)*coef_range + coef_mid
+    for i in range(n):
+        X.append((np.random.rand(dim) - 0.5)*x_range + x_mid)
+        y.append(np.dot(X[-1], coef) + np.random.randn(dim)*sqrt(noise_var))
+    X = np.array(X)
+    y = np.array(y)
+    return X, y, coef
 
 def test_confidence_interval_with_unknown_variance():
     n = 1000
-
-    def generate_data(n):
-        X, y = [], []
-        for i in range(n):
-            X.append([np.random.random()*10])
-            y.append(np.random.normal(5*X[-1][0], np.sqrt(10)))
-        return np.array(X), np.array(y)
-
-
     counter = 0
     for i in range(n):
-        X, y = generate_data(n=1000)
+        X, y, c = generate_data(n=100)
         X, y = b.prettify_data(X, y)
 
         """ using g-prior with g-> +oo """
@@ -24,14 +35,35 @@ def test_confidence_interval_with_unknown_variance():
         g = 1e+50
         w_0 = np.zeros((1, 1))
         V_0 = g*(inv(X.T*X))
-        print(V_0)
         lr = b.LinearRegression(w_0=w_0, a_0=a_0, b_0=b_0, V_0=V_0)
 
         lr.fit(X, y)
         coef = lr.w.mode[0]
         cov = lr.w.covariance[0,0]
-        if (coef - 1.96*np.sqrt(cov)) < 5 < (coef + 1.96*np.sqrt(cov)):
+        if (coef - 1.96*np.sqrt(cov)) < c[0] < (coef + 1.96*np.sqrt(cov)):
             counter += 1
     fraction = counter / n
     print(fraction)
-    assert abs(fraction - 0.95) < 0.01
+    assert abs(fraction - 0.95) < 0.02
+
+
+def test_against_sklearn():
+    from sklearn.linear_model import BayesianRidge
+    dim = 1
+    n_tests = 10
+    n_points = 100
+
+    for test in range(n_tests):
+        X, y, c = generate_data(n=10000)
+        X, y, c = b.prettify_data(X, y)
+        sklearn_regression = BayesianRidge()
+        bayescraft_regression = b.LinearRegression(w_0=np.matrix([0]), V_0=np.matrix([[1]]), a_0=1e-6, b_0=1e+6)
+        sklearn_regression.fit(X, y)
+        bayescraft_regression.fit(X, y)
+
+        for i in range(n_points):
+            point = np.random.rand(dim)
+            print(point)
+            print(sklearn_regression.predict(point))
+            print(bayescraft_regression.predict(point).mean)
+            assert abs(sklearn_regression.predict(point) - bayescraft_regression.predict(point).mean) < 0.5
