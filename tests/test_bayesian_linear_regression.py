@@ -45,25 +45,3 @@ def test_confidence_interval_with_unknown_variance():
     fraction = counter / n
     print(fraction)
     assert abs(fraction - 0.95) < 0.02
-
-
-def test_against_sklearn():
-    from sklearn.linear_model import BayesianRidge
-    dim = 1
-    n_tests = 10
-    n_points = 100
-
-    for test in range(n_tests):
-        X, y, c = generate_data(n=10000)
-        X, y, c = b.prettify_data(X, y)
-        sklearn_regression = BayesianRidge()
-        bayescraft_regression = b.LinearRegression(w_0=np.matrix([0]), V_0=np.matrix([[1]]), a_0=1e-6, b_0=1e+6)
-        sklearn_regression.fit(X, y)
-        bayescraft_regression.fit(X, y)
-
-        for i in range(n_points):
-            point = np.random.rand(dim)
-            print(point)
-            print(sklearn_regression.predict(point))
-            print(bayescraft_regression.predict(point).mean)
-            assert abs(sklearn_regression.predict(point) - bayescraft_regression.predict(point).mean) < 0.5
