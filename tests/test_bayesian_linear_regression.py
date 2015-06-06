@@ -28,14 +28,15 @@ def test_confidence_interval_with_unknown_variance():
     counter = 0
     for i in range(n):
         X, y, c = generate_data(n=100)
-        X, y = b.prettify_data(X, y)
+        X = np.matrix(X)
+        y = np.matrix(y)
 
         """ using g-prior with g-> +oo """
         a_0 = b_0 = 0 
         g = 1e+50
         w_0 = np.zeros((1, 1))
         V_0 = g*(inv(X.T*X))
-        lr = b.LinearRegression(w_0=w_0, a_0=a_0, b_0=b_0, V_0=V_0)
+        lr = b.LinearRegressionUnknownVariance(dim=1, w_0=w_0, a_0=a_0, b_0=b_0, V_0=V_0)
 
         lr.fit(X, y)
         coef = lr.w.mode[0]
