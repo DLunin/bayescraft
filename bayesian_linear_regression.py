@@ -1,5 +1,5 @@
 import numpy as np
-from numpy.linalg import inv
+from numpy.linalg import inv, pinv
 from numpy import log, sqrt
 import scipy as sp
 import matplotlib.pyplot as plt
@@ -45,11 +45,28 @@ class LinearRegressionKnownVariance:
         return np.array(np.matrix(X)*self.w_N)
 
 class LinearRegressionUnknownVariance:
+    @staticmethod
+    def g_prior(X, g=1e+50):
+        X = to_matrix(X)
+        dim = X.shape[1]
+        a_0 = b_0 = 0
+        w_0 = np.zeros((dim, 1))
+        V_0 = g*(inv(X.T*X))
+        return LinearRegressionUnknownVariance(dim=dim, w_0=w_0, V_0=V_0, a_0=a_0, b_0=b_0)
+
+    @staticmethod
+    def uninformative_prior(dim):
+        g = 1e+6
+        a_0 = b_0 = 0
+        w_0 = np.zeros((dim, 1))
+        V_0 = g*np.matrix(np.ones((dim, dim)), copy=False)
+        return LinearRegressionUnknownVariance(dim=dim, w_0=w_0, V_0=V_0, a_0=a_0, b_0=b_0)
+
     def __init__(self, dim=None, w_0=None, V_0=None, a_0=None, b_0=None):
         self.dim = dim
         self.w_0 = to_column_vector(w_0)
         self.V_0 = to_matrix(V_0)
-        self._inv_V_0 = inv(self.V_0)
+        self._inv_V_0 = pinv(self.V_0)
         self.a_0 = a_0
         self.b_0 = b_0
         self.reset()
@@ -60,7 +77,7 @@ class LinearRegressionUnknownVariance:
         self.a_N = self.a_0
         self.b_N = self.b_0
         self._inv_V_N = self._inv_V_0
-        self._b_init = self.w_0.T*inv(self.V_0)*self.w_0
+        self._b_init = self.w_0.T*self._inv_V_0*self.w_0
 
     @property
     def w(self):
@@ -131,14 +148,7 @@ class LinearRegressionUnknownVariance:
 
     def predict(self, X):
         X = np.matrix(X)
-        return self.posterior_predictive(X).mode
+        return to_1d_array(self.posterior_predictive(X).mode)
 
 LinearRegression = LinearRegressionUnknownVariance
 
-def g_prior(X, g=1e+50):
-    X = to_matrix(X)
-    dim = X.shape[1]
-    a_0 = b_0 = 0
-    w_0 = np.zeros((dim, 1))
-    V_0 = g*(inv(X.T*X))
-    return LinearRegressionUnknownVariance(dim=dim, w_0=w_0, V_0=V_0, a_0=a_0, b_0=b_0)
