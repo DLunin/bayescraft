@@ -20,9 +20,16 @@ from itertools import repeat
 
 from .information import mutual_information
 from .utility import maximum_spanning_tree, ListTable, lmap
-from .information import pairwise_mutual_info, mutual_information
+from .information import pairwise_mutual_info, mutual_information, conditional_mutual_information
 
 def build_pmap_skeleton(names, ci_test, d=None):
+    """
+    Build the skeleton of the P-map using the witness sets.
+    :param names: variable names
+    :param ci_test: a conditional independence oracle of the form (name1, name2, witness -> bool)
+    :param d: maximum number of parents in graph
+    :return: P-map skeleton graph, set of witnesses
+    """
     if d is None:
         d = len(names) - 1
     G = nx.Graph()
@@ -42,9 +49,23 @@ def build_pmap_skeleton(names, ci_test, d=None):
     return G, witnesses
 
 def info_ci_test(x, y, witness, treshold=None, data=None):
-    return mutual_information(data[x], data[y], data[witness])
+    """
+    Conditional independence test based on conditional mutual information
+    :param x: first variable name
+    :param y: second variable name
+    :param witness: witness set
+    :param treshold: treshold for mutual information
+    :param data: the dataset
+    :return: are the variables independent
+    """
+    return conditional_mutual_information(data, x, witness, y) < treshold
 
 def chow_liu(X):
+    """
+    Chow-Liu structure learning algorithm.
+    :param X: dataset
+    :return: the learned graph (tree)
+    """
     n_objects = X.shape[0]
     n_vars = X.shape[1]
     g = nx.complete_graph(n_vars)
@@ -54,6 +75,14 @@ def chow_liu(X):
     return g
 
 def relmatrix(f, val1, val2):
+    """
+    A table (2d numpy array) obtained by applying function `f` to different combinations of
+    values from `val1` and `val2`
+    :param f: applied function
+    :param val1: row values
+    :param val2: col values
+    :return: numpy array -- the table
+    """
     res = [[''] + list(val2)]
     for v1 in val1:
         li = [v1]
@@ -63,16 +92,33 @@ def relmatrix(f, val1, val2):
     return res
 
 def infotable(data):
+    """
+    Table of pairwise mutual informations between variables in the dataset.
+    :param data: the dataset
+    :return: the resulting table
+    """
     n_var = data.shape[1]
     return [[mutual_information(data[:, i1:i1+1], data[:, i2:i2+1]) for i2 in range(n_var)] for i1 in range(n_var)]
 
 def infomatrix(data):
+    """
+    Table of pairwise mutual informations between variables in the dataset in the form of ListTable
+    :param data: the dataset
+    :return: the resulting table as ListTable
+    """
     n_var = data.shape[1]
     return ListTable(relmatrix(lambda i1, i2: mutual_information(data[:, i1:i1+1], data[:, i2:i2+1]), range(n_var), range(n_var)))
 
 from collections import deque
-# поиск кратчайшего пути с помощью dfs
 def bfs_path(G, u, v, blocked = lambda u, v: False):
+    """
+    Shortest path found by BFS algorithm
+    :param G: target graph
+    :param u: from
+    :param v: to
+    :param blocked: function indicating if an edge u, v is blocked
+    :return: a list -- shortest path
+    """
     visited = set([u])
     prev = { u : None }
     queue = deque()
@@ -99,8 +145,15 @@ def bfs_path(G, u, v, blocked = lambda u, v: False):
     result.reverse()
     return result
 
-# Модифицированный Форд-Фалкерсон
 def info_flow_func(G, s, t, capacity='capacity', value_only=False):
+    """
+    Modified Ford-Fulkerson
+    :param G: target graph
+    :param s: source
+    :param t: destination
+    :param capacity: name of the capacity attribute
+    :return: flow value
+    """
     eps = 1e-9
     RG = nx.DiGraph()
     RG.add_nodes_from(G.nodes())
@@ -144,6 +197,13 @@ def info_flow_func(G, s, t, capacity='capacity', value_only=False):
 
 
 def flowgraph(G, data, directed=True):
+    """
+    A graph which represents d-separation; run flow algorithms on such graph
+    :param G: target graph
+    :param data: the dataset
+    :param directed: should the resulting graph be directed
+    :return: the flowgraph
+    """
     if directed:
         fG = nx.DiGraph()
     else:
@@ -159,6 +219,13 @@ def flowgraph(G, data, directed=True):
     return fG
 
 def infoflow(fG, s, t):
+    """
+    Information flow.
+    :param fG: the flowgraph
+    :param s: source
+    :param t: target
+    :return: flow value
+    """
     flow_val1 = info_flow_func(fG, (s, 'top'), (t, 'bottom'), capacity='info')
     flow_val2 = info_flow_func(fG, (s, 'top'), (t, 'top'), capacity='info')
     if flow_val1 > flow_val2:
@@ -168,11 +235,27 @@ def infoflow(fG, s, t):
 
 #@stabilize(0.01)
 def flowdiff(fG, data, s, t, debug=False):
+    """
+    The difference between mutual information and information flow.
+    :param fG: the flowgraph
+    :param data: the dataset
+    :param s: source
+    :param t: target
+    :param debug: debug mode on/off
+    :return: flow difference
+    """
     flow_val = infoflow(fG, s, t)
     direct_info = pairwise_mutual_info(data, s, t)
     return direct_info - flow_val
 
 def gomory_hu_tree(G, capacity='capacity'):
+    """
+    Builds a Gomory-Hu tree. Such tree allows to answer queries about finding
+    maximum flow quickly. However, it works only for unoriented graphs.
+    :param G: target graph
+    :param capacity: name of the capacity attribute
+    :return: Gomory-Hu tree
+    """
     import igraph as ig
     g_nodes = list(G.nodes())
     V = len(g_nodes)
@@ -190,6 +273,9 @@ def gomory_hu_tree(G, capacity='capacity'):
     return T
 
 class MaxFlows:
+    """
+    A class for answering queries about maximum flows (using Gomory-Hu tree).
+    """
     def __init__(self, G, capacity='capacity'):
         self.capacity = capacity
         self.ghtree = gomory_hu_tree(G, capacity=capacity)
@@ -212,6 +298,12 @@ class MaxFlows:
                                                       self[(s, 'bottom'), (t, 'top')])
 
 def edge_candidates_undirected(G, data):
+    """
+    A list of edges along with their flowdiffs, sorted by their flowdiffs.
+    :param G: target undirected graph
+    :param data: the dataset
+    :return: list of candidates
+    """
     flowdiffs = []
     fG = flowgraph(G, data, directed=False)
     mf = MaxFlows(fG, capacity='info')
@@ -222,6 +314,12 @@ def edge_candidates_undirected(G, data):
     return flowdiffs
 
 def edge_candidates(G, data):
+    """
+    A list of edges along with their flowdiffs, sorted by their flowdiffs.
+    :param G: target graph
+    :param data: the dataset
+    :return: list of candidates
+    """
     flowdiffs = []
     fG = flowgraph(G, data, directed=True)
     mf = MaxFlows(fG, capacity='info')

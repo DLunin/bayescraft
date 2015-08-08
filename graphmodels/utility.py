@@ -5,6 +5,7 @@ import matplotlib.pyplot as plt
 from itertools import product
 import random
 import math
+from functools import wraps
 
 def compose(f, g):
     """
@@ -276,6 +277,13 @@ class ListTable(list): # from http://calebmadrigal.com/display-list-as-table-in-
         return ''.join(html)
 
 def pretty_print_distr_table(table, names):
+    """
+    Get a ListTable of the distribution specified by `table`, so that it can be
+    prettily rendered in ipython notebook
+    :param table: table of the distribution
+    :param names: names assigned to variables in table
+    :return: ListTable
+    """
     table = np.array(table)
     t = ListTable()
     t.append(names + ['P'])
@@ -284,6 +292,13 @@ def pretty_print_distr_table(table, names):
     return t
 
 def pretty_print_distr_dict(d, names):
+    """
+    Get a ListTable of the distribution specified by dict `d`, so that it can be
+    prettily rendered in ipython notebook.
+    :param d: dict of the distribution
+    :param names: names assigned to variables in dict
+    :return: ListTable
+    """
     t = ListTable()
     t.append(names + ['P'])
 
@@ -298,6 +313,14 @@ def pretty_print_distr_dict(d, names):
     return t
 
 class permutation_dict(dict):
+    """
+    A modification of dict.
+
+    Tuple keys are considered equal, if the first can be obtained by permuting the second.
+    For example (1, 3, 2, 0) == (0, 1, 2, 3)
+
+    Also, hooks for __getitem__ and __setitem__ are provided.
+    """
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self._phook_setitem_ = lambda key, val: val
@@ -320,8 +343,13 @@ class permutation_dict(dict):
             arg = tuple([arg])
         return self._phook_getitem_(arg, super().__getitem__(arg))
 
-from functools import wraps
 def stabilize(alpha):
+    """
+    Decorator which tries to reduce variance of a random function by
+    averaging it across multiple calls. Function must return a float.
+    :param alpha: required precision
+    :return: stabilized function
+    """
     def stabilize_decorator(f):
         @wraps(f)
         def new_f(*args, **kwargs):

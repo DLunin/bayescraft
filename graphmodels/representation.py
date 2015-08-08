@@ -1,21 +1,7 @@
 import networkx as nx
 import numpy as np
 from numpy import log, exp
-import scipy as sp
-import pymc
-from scipy import stats
-import emcee
-import random
-import matplotlib as mpl
-import matplotlib.pyplot as plt
-from itertools import product
-from sklearn.metrics import mutual_info_score
-from scipy.stats import gaussian_kde
-from mpl_toolkits.mplot3d import Axes3D
 from itertools import *
-from NPEET import mi
-from math import sqrt
-import math
 
 from .utility import pretty_draw, are_equal_graphs, permutation_dict, compose, lmap, descendants, ancestors
 from .factors import TableFactor, DictFactor, FunctionFactor
@@ -137,6 +123,9 @@ def unoriented_immoralities(G):
         combinations_with_replacement(G.nodes(), 3))
 
 class UGM(nx.Graph):
+    """
+    Undirected Graphical Model
+    """
     def __init__(self):
         super().__init__(self)
         self.potential = permutation_dict()
@@ -179,6 +168,12 @@ def random_binary_ugm(n=10, p=None):
     return random_binary_ugm_distr(nx.erdos_renyi_graph(n=n, p=p))
 
 def UGM_reduce(self, node, val):
+    """
+    Reduce a node in UGM
+    :param node: node to be reduced
+    :param val: value assigned to the reduced node
+    :return: None
+    """
     for factor, potential in list(self.potential.items()):
         if node in factor:
             potential.reduce(node, val)
@@ -189,10 +184,14 @@ def UGM_reduce(self, node, val):
             if len(factor) > 0:
                 self.potential[factor] = potential
     super(UGM, self).remove_node(node)
-
 UGM.reduce = UGM_reduce
 
 def factor_graph(G):
+    """
+    Graph of factors of G: edge exists iff factors intersect.
+    :param G: target graph
+    :return: graph of factors
+    """
     fG = nx.Graph()
     fG.add_nodes_from(G.nodes(), factor=False)
     fG.add_nodes_from(G.factors, factor=True)
@@ -201,8 +200,14 @@ def factor_graph(G):
     return fG
 
 def plot_factor_graph(fG):
+    """
+    Plot graph of factors
+    :param fG: target graph
+    :return: None
+    """
     pretty_draw(fG, node_size=lambda node, attr: 1700 if attr['factor'] else 300,
                node_color=lambda node, attr: '#88FF88' if attr['factor'] else '#AAAAFF')
+    return None
 
 UGM.factor_graph = property(factor_graph)
 UGM.fgplot = compose(plot_factor_graph, factor_graph)
@@ -222,6 +227,9 @@ def is_I_map(G1, G2, debug=False):
     return True
 
 class DGM(nx.DiGraph):
+    """
+    Directed Graphical Model
+    """
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
@@ -248,6 +256,12 @@ def random_binary_dgm(n=10, p=0.2):
     return dgm
 
 def moralize(G):
+    """
+    Moralize an undirected graph: add edges so that all immoralities are converted to covered
+    v-structures. Original graph is not modified, rather, a new graph is created.
+    :param G: target graph
+    :return: moralized graph
+    """
     mG = nx.Graph()
     mG.add_nodes_from(G.nodes())
     mG.add_edges_from(G.edges())
@@ -256,6 +270,11 @@ def moralize(G):
     return mG
 
 def moral(G):
+    """
+    A graph is moral if it has no immoralities.
+    :param G: target graph
+    :return: is target graph moral
+    """
     return len(list(immoralities(G))) == 0
 
 DGM.moralize = moralize
@@ -263,6 +282,11 @@ DGM.moral = property(moral)
 
 from itertools import combinations_with_replacement
 def clique_graph(G):
+    """
+    Build a clique graph; nodes are cliques, two nodes are connected iff cliques intersect.
+    :param G: target graph
+    :return: the clique graph
+    """
     cg = nx.Graph()
     for clique in nx.find_cliques(G):
         cg.add_node(tuple(clique))
@@ -272,6 +296,11 @@ def clique_graph(G):
     return cg
 
 def ugm_from_factors(factors):
+    """
+    Build UGM from a list of factors.
+    :param factors: a dict of factors in form  { factor : potential }
+    :return: UGM
+    """
     ugm = UGM()
     for factor, potential in factors.items():
         ugm.add_nodes_from(factor)
@@ -280,6 +309,11 @@ def ugm_from_factors(factors):
     return ugm
 
 def graph_from_factors(factors):
+    """
+    Build graph from factors
+    :param factors: a list of factors
+    :return: graph obtained from factors
+    """
     ugm = nx.Graph()
     for factor in factors:
         ugm.add_nodes_from(factor)
