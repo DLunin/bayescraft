@@ -80,7 +80,7 @@ def mutual_information_naive(data1, data2, debug=False):
     def f(x):
         return np.log(distr12(x)) - np.log(distr1(x[:dim1])) - np.log(distr2(x[dim1:]))
 
-    return monte_carlo_integration(lambda size=1: np.transpose(distr12.resample(size=size)), f)
+    return monte_carlo_integration(lambda size=1: np.transpose(distr12.resample(size=size)), f)[0]
 
 #mutual_information = lambda *args, debug=None, **kwargs: mi(*args, **kwargs)
 mutual_information = mutual_information_naive
@@ -117,6 +117,36 @@ def conditional_mutual_information(data, x, y, z, bw_method=None):
     xyz_distr = gaussian_kde(np.transpose(data[:, x + y + z]), bw_method=bw_method)
     z_distr = gaussian_kde(np.transpose(data[:, z]), bw_method=bw_method)
     yz_distr = gaussian_kde(np.transpose(data[:, y + z]), bw_method=bw_method)
+
+    def f(s):
+        x_part = s[:n_x]
+        y_part = s[n_x:n_y+n_x]
+        xy_part = s[:n_x + n_y]
+        yz_part = s[n_x:n_x+n_y+n_z]
+        z_part = s[n_x+n_y:n_x+n_y+n_z]
+        return log(xyz_distr(s)) + log(y_distr(y_part)) - log(xy_distr(xy_part)) - log(yz_distr(yz_part))
+
+    return monte_carlo_integration(lambda size=1: np.transpose(xyz_distr.resample(size=size)), f)
+
+def conditional_mutual_information2(data_x, data_y, data_z, bw_method=None):
+    """
+    Conditional mutual information estimator.
+    :param data_x: first distribution data
+    :param data_y: conditioned variables data
+    :param data_z: second distribution data
+    :param bw_method: parameter of gaussian_kde of scipy
+    :return: estimated conditional mutual information
+    """
+    n_x, n_y, n_z = data_x.shape[1], data_y.shape[1], data_z.shape[1]
+    assert n_x == 1
+
+    if data_y.shape[0] == 0:
+        return mutual_information(data_x, data_z)
+    y_distr = gaussian_kde(np.transpose(data_y), bw_method=bw_method)
+    xy_distr = gaussian_kde(np.transpose(np.hstack([data_x, data_y])), bw_method=bw_method)
+    xyz_distr = gaussian_kde(np.transpose(np.hstack([data_x, data_y, data_z])), bw_method=bw_method)
+    z_distr = gaussian_kde(np.transpose(data_z), bw_method=bw_method)
+    yz_distr = gaussian_kde(np.transpose(np.hstack([data_y, data_z])), bw_method=bw_method)
 
     def f(s):
         x_part = s[:n_x]

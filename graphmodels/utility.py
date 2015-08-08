@@ -364,3 +364,38 @@ def stabilize(alpha):
             return current
         return new_f
     return stabilize_decorator
+
+def relmatrix(f, val1, val2):
+    """
+    A table (2d numpy array) obtained by applying function `f` to different combinations of
+    values from `val1` and `val2`
+    :param f: applied function
+    :param val1: row values
+    :param val2: col values
+    :return: numpy array -- the table
+    """
+    res = [[''] + list(val2)]
+    for v1 in val1:
+        li = [v1]
+        for v2 in val2:
+            li.append(f(v1, v2))
+        res.append(li)
+    return res
+
+def infotable(data):
+    """
+    Table of pairwise mutual informations between variables in the dataset.
+    :param data: the dataset
+    :return: the resulting table
+    """
+    n_var = data.shape[1]
+    return [[mutual_information(data[:, i1:i1+1], data[:, i2:i2+1]) for i2 in range(n_var)] for i1 in range(n_var)]
+
+def infomatrix(data):
+    """
+    Table of pairwise mutual informations between variables in the dataset in the form of ListTable
+    :param data: the dataset
+    :return: the resulting table as ListTable
+    """
+    n_var = data.shape[1]
+    return ListTable(relmatrix(lambda i1, i2: mutual_information(data[:, i1:i1+1], data[:, i2:i2+1]), range(n_var), range(n_var)))
