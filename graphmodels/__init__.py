@@ -5,4 +5,5 @@ from .representation import *
 from .utility import *
 from .information import *
 from .stucture import *
+from .generators import *
 from .flow_analysis import *
