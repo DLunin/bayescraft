@@ -128,6 +128,40 @@ class TableFactor:
         """
         return len(self.names) == 0
 
+    @property
+    def n_parameters(self):
+        """
+        Number of parameters which specify the factor.
+        """
+        result = 1
+        for n in self.table.shape:
+            result *= n
+        return result
+
+
+class TableCPD(TableFactor):
+    """
+    A CPD repesented by table, that is, a multidimensional array; indexes represent
+    arguments while elements represent values.
+
+    Supports only discrete argument values. Moreover, they must be in range 0-N, that is,
+    consecutive integers.
+
+    The difference between CPD and Factor classes is that values of CPD must sum to 1.
+    """
+    def __init__(self, table, names):
+        super().__init__(table, names)
+
+    @property
+    def n_parameters(self):
+        """
+        Number of parameters which specify the CPD.
+        """
+        result = 1
+        for n in self.table.shape:
+            result *= n
+        return result - 1
+
 
 class DictFactor:
     """
@@ -218,9 +252,20 @@ class FunctionFactor:
         """
         return self.f.domain
 
+    @property
+    def n_parameters(self):
+        """
+        Number of parameters which specify the factor.
+        """
+        result = 1
+        for n in self.table.shape:
+            result *= n
+        return result
+
     def __contains__(self, name):
         """
         :param name: variable name
         :return: do the factor arguments contain that variable
         """
         return name in self.names
+

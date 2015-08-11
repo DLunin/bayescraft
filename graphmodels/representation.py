@@ -247,6 +247,36 @@ class DGM(nx.DiGraph):
             result.append(attr['CPD'])
         return result
 
+def discretize(data, bins):
+    """
+    Binning continuous data array to get discrete data array.
+    :param data: target numpy array
+    :return: discretized array
+    """
+    if not is_discrete(data):
+        ls = np.linspace(min(data), max(data), num=bins+1)[1:-1]
+        return np.digitize(data, ls)
+    else: return data
+
+def is_discrete(data):
+    return all(map(lambda x: float(x).is_integer(), data))
+
+def dgm_from_data(data, discretizing_bins=None):
+    """
+    Initialize DGM from pandas DataFrame.
+    Add nodes, set some of their attributes(data, |Val|).
+    :param data: pandas DataFrame
+    :return: DGM
+    """
+    G = DGM()
+    G.add_nodes_from(data.columns.values)
+    if discretizing_bins:
+        nx.set_node_attributes(G, 'data', { node : discretize(data[node].values, discretizing_bins) for node in G.nodes() })
+        nx.set_node_attributes(G, '|Val|', { node : len(set(attr['data'])) for node, attr in G.nodes(data=True) })
+    else:
+        nx.set_node_attributes(G, 'data', { node : data[node].values for node in G.nodes() })
+    return G
+
 def random_binary_dgm(n=10, p=0.2):
     G = nx.gnr_graph(n, p)
     dgm = DGM()

@@ -157,3 +157,38 @@ def conditional_mutual_information2(data_x, data_y, data_z, bw_method=None):
         return log(xyz_distr(s)) + log(y_distr(y_part)) - log(xy_distr(xy_part)) - log(yz_distr(yz_part))
 
     return monte_carlo_integration(lambda size=1: np.transpose(xyz_distr.resample(size=size)), f)
+
+def discrete_distribution(data):
+    """
+    Build a discrete distribution in form of { point : probability }
+    :param data: numpy.array, (data points, dimension)
+    :return: dict of distribution
+    """
+    distr = { }
+    n = data.shape[0]
+    for point in data:
+        if tuple(point) in distr:
+            distr[tuple(point)] += 1. / n
+        else:
+            distr[tuple(point)] = 1. / n
+    return distr
+
+def discrete_mutual_information(data_x, data_y):
+    """
+    Discrete mutual information.
+    :param data_x: first distribution data
+    :param data_y: second distribution data
+    :return: mutual information
+    """
+    x_dim = data_x.shape[1]
+    distr_x = discrete_distribution(data_x)
+    distr_y = discrete_distribution(data_y)
+    distr_xy = discrete_distribution(np.hstack([data_x, data_y]))
+    result = 0.
+    for point, p_xy in distr_xy.items():
+        x_part = point[:x_dim]
+        y_part = point[x_dim:]
+        p_x = distr_x[tuple(x_part)]
+        p_y = distr_y[tuple(y_part)]
+        result += p_xy * (log(p_xy) - log(p_x) - log(p_y))
+    return result

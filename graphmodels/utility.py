@@ -7,6 +7,8 @@ import random
 import math
 from functools import wraps
 
+from .information import mutual_information
+
 def compose(f, g):
     """
     :param f: Second function to apply
@@ -399,3 +401,11 @@ def infomatrix(data):
     """
     n_var = data.shape[1]
     return ListTable(relmatrix(lambda i1, i2: mutual_information(data[:, i1:i1+1], data[:, i2:i2+1]), range(n_var), range(n_var)))
+
+def colvec(arr):
+    """
+    Transforms a numpy array into a column vector.
+    :param arr: target arrray
+    :return: column vector -- numpy array of shape (n, 1)
+    """
+    return np.transpose(np.atleast_2d(arr))
