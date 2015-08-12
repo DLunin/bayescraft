@@ -1,5 +1,8 @@
 import numpy as np
 import scipy as sp
+from scipy import stats
+from itertools import chain
+from numpy.linalg import pinv
 
 """
 This code provides united representation of probability distributions (or functions in general),
@@ -157,3 +160,46 @@ class MathFunction:
         :return: integral value
         """
         return MathFunction(*self.domain.integrate_along(axis))
+
+class MathDistribution:
+    """
+    Stores a distribution (scipy-style) and its domain.
+    """
+
+    def __init__(self, distr, domain):
+        self.distr = distr
+        self.domain = domain
+
+    def __call__(self, *args, **kwargs):
+        return self.distr(*args, **kwargs)
+
+class GaussianDistribution(MathDistribution):
+    """
+    Gaussian (normal) multivariate distribution.
+    """
+    def __init__(self, mean, cov):
+        self.mean = mean
+        self.cov = np.matrix(cov)
+        assert self.cov.shape[0] == self.cov.shape[1]
+        domain = ProductDomain([IntervalDomain(-np.inf, +np.inf) for i in range(len(self.mean))])
+        super().__init__(stats.multivariate_normal(self.mean, self.cov), domain)
+
+    def reduce(self, assignment):
+        if all([x is None for x in assignment]):
+            return GaussianDistribution(self.mean, self.cov)
+        # reordering variables, so that non-reduced variables go before reduced
+        reduced_idx = [i for i in range(len(assignment)) if assignment[i] is not None]
+        non_reduced_idx = [i for i in range(len(assignment)) if assignment[i] is None]
+        x = np.matrix([assignment[idx] for idx in reduced_idx]).T
+        new_idx = non_reduced_idx + reduced_idx
+        mean1 = np.matrix([self.mean[idx] for idx in non_reduced_idx]).T
+        mean2 = np.matrix([self.mean[idx] for idx in reduced_idx]).T
+        cov11 = self.cov[non_reduced_idx][:, non_reduced_idx]
+        cov22 = self.cov[reduced_idx][:, reduced_idx]
+        cov12 = self.cov[non_reduced_idx][:, reduced_idx]
+        mean = mean1 + cov12 * pinv(cov22) * (x - mean2)
+        cov = cov11 - cov12 * pinv(cov22) * cov12.T
+        return GaussianDistribution(np.array(mean.T), cov)
+
+    def rvs(self, *args, **kwargs):
+        return self.distr.rvs(*args, **kwargs)
