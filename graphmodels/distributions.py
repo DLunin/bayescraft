@@ -2,6 +2,7 @@ import numpy as np
 import scipy as sp
 from scipy import stats
 from itertools import chain
+from math import sqrt
 from numpy.linalg import pinv
 
 """
@@ -173,20 +174,21 @@ class MathDistribution:
     def __call__(self, *args, **kwargs):
         return self.distr(*args, **kwargs)
 
-class GaussianDistribution(MathDistribution):
+class MultivariateGaussianDistribution(MathDistribution):
     """
     Gaussian (normal) multivariate distribution.
     """
     def __init__(self, mean, cov):
         self.mean = mean
         self.cov = np.matrix(cov)
+        self.dim = len(self.mean)
         assert self.cov.shape[0] == self.cov.shape[1]
         domain = ProductDomain([IntervalDomain(-np.inf, +np.inf) for i in range(len(self.mean))])
         super().__init__(stats.multivariate_normal(self.mean, self.cov), domain)
 
     def reduce(self, assignment):
         if all([x is None for x in assignment]):
-            return GaussianDistribution(self.mean, self.cov)
+            return MultivariateGaussianDistribution(self.mean, self.cov)
         # reordering variables, so that non-reduced variables go before reduced
         reduced_idx = [i for i in range(len(assignment)) if assignment[i] is not None]
         non_reduced_idx = [i for i in range(len(assignment)) if assignment[i] is None]
@@ -199,7 +201,80 @@ class GaussianDistribution(MathDistribution):
         cov12 = self.cov[non_reduced_idx][:, reduced_idx]
         mean = mean1 + cov12 * pinv(cov22) * (x - mean2)
         cov = cov11 - cov12 * pinv(cov22) * cov12.T
-        return GaussianDistribution(np.array(mean.T), cov)
+        return MultivariateGaussianDistribution(np.array(mean.T), cov)
+
+    def marginalize(self, marginalized):
+        non_marginalized = [i for i in range(self.dim)]
+        mean = self.mean[non_marginalized]
+        cov = self.cov[non_marginalized][:, non_marginalized]
+        return MultivariateGaussianDistribution(mean, cov)
 
     def rvs(self, *args, **kwargs):
         return self.distr.rvs(*args, **kwargs)
+
+class LinearGaussianDistribution:
+    """
+    Univariate gaussian distribution.
+    """
+    def __init__(self, w0, w, variance):
+        self.w0 = w0
+        self.w = w
+        self.variance = variance
+        self.dim = len(w) + 1
+
+    @property
+    def scale(self):
+        return sqrt(self.variance)
+
+    def pdf(self, x):
+        x = np.atleast_1d(x)
+        u = x[1:]
+        x = x[0]
+        return stats.norm.pdf(x, loc=np.dot(u, self.w) + self.w0, scale=self.scale)
+
+    def rvs(self, size=1):
+        assert self.dim == 1
+        return stats.norm.rvs(size=size, loc=self.w0, scale=self.scale)
+
+    def reduce(self, assignment):
+        assert assignment[0] is None
+        reduced = [i - 1 for i in range(1, len(assignment)) if assignment[i] is not None]
+        non_reduced = [i - 1 for i in range(1, len(assignment)) if assignment[i] is None]
+        reduced_values = np.array([x for x in assignment if x is not None])
+        w0 = self.w0 + np.dot(self.w[reduced], reduced_values)
+        w = self.w[non_reduced]
+        return LinearGaussianDistribution(w0, w, self.variance)
+
+    @staticmethod
+    def mle(data):
+        """
+        Maximum Likelihood Estimation
+        :param data: data in the form [(x, u0, u1, ... , un)], preferably numpy array
+        :return: LinearGaussianDistribution with estimated parameters
+        """
+        data = np.asarray(data)
+        u = data[:, 1:]
+        x = data[:, 0]
+        dim = data.shape[1]
+        covs = np.matrix(np.atleast_2d(np.cov(np.transpose(data))), copy=False)
+        means = np.mean(data, axis=0)
+        A = np.matrix(np.zeros((dim, dim)))
+        A[0, 0] = 1
+        for i in range(1, dim):
+            for j in range(1, i + 1):
+                A[i, j] = covs[i, j]
+                A[j, i] = covs[i, j]
+        b = np.zeros(dim-1)
+        for i in range(1, dim):
+            b[i-1] = covs[0, i]
+        if data.shape[1] > 1:
+            w = np.linalg.solve(A[1:, 1:], b)
+        else:
+            w = np.array([])
+        w0 = means[0] - np.dot(means[1:], w)
+        mw = np.matrix(w).T
+        if data.shape[1] > 1:
+            variance = covs[0, 0] + (mw.T * covs[1:, 1:] * mw).sum(axis=1)
+        else:
+            variance = covs[0, 0]
+        return LinearGaussianDistribution(w0, w, variance)

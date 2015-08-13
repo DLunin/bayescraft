@@ -2,10 +2,12 @@ import networkx as nx
 import numpy as np
 from numpy import log, exp
 from itertools import *
+import pandas as pd
 
 from .utility import pretty_draw, are_equal_graphs, permutation_dict, compose, lmap, descendants, ancestors
-from .factors import TableFactor, DictFactor, FunctionFactor
-from .distributions import MathFunction
+from .factors import *
+from .distributions import *
+
 
 class DGM(nx.DiGraph):
     """
@@ -14,6 +16,7 @@ class DGM(nx.DiGraph):
     def __init__(self):
         super().__init__()
         self.cpd = { }
+        self.model = { }
 
     def reachable(G, source, observed, debug=False, G_reversed=None):
         """
@@ -179,12 +182,20 @@ class DGM(nx.DiGraph):
         return result
 
     def generate_data(self, n_samples):
-        result = { }
+        result = pd.DataFrame()
         for node in nx.topological_sort(self):
             parents = list(self.predecessors(node))
-            assignment = { key : result[key] for key in parents }
-            result.update(self.cpd[node].sample(n_samples=n_samples, observed=assignment))
+            assignment = result[parents]
+            data_part = self.cpd[node].sample(n_samples=n_samples, observed=assignment)
+            result = pd.concat([result, data_part], axis=1)
         return result
+
+    def mle(self, data):
+        cpd = { }
+        for node in nx.topological_sort(self):
+            parents = list(self.predecessors(node))
+            cpd[node] = ParametricFunctionCPD.mle(data[parents + [node]], self.model[node], conditioned=parents)
+        return cpd
 
 class UGM(nx.Graph):
     """

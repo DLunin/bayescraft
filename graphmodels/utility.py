@@ -128,7 +128,10 @@ def plot_distr_2d(distr, domain=(-25, 25)):
     if abs(end - begin) < 1e-10:
         begin, end = domain
     x = np.arange(begin, end, (end - begin) / 1000)
-    plt.plot(x, distr(x))
+    try:
+        plt.plot(x, lmap(distr, x))
+    except:
+        plt.plot(x, lmap(lambda x: distr(np.array(x)), x))
     return None
 
 def plot_distr_3d(distr):
@@ -137,7 +140,6 @@ def plot_distr_3d(distr):
     :param distr: the probability distribution to plot in form of [float, float] -> float
     :return: None
     """
-    print(distr([0, 0]))
     fig = plt.figure()
     ax = fig.add_subplot(111, projection='3d')
     X = np.arange(-10, 10, 0.25)

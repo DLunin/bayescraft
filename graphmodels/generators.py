@@ -5,7 +5,10 @@ import scipy as sp
 import scipy.stats as stats
 from itertools import *
 import pytest
-from bayescraft.graphmodels.factors import TableCPD
+from bayescraft.graphmodels.factors import (TableCPD, MultivariateGaussianDistribution,
+                                            ParametricFunctionCPD, LinearGaussianDistribution)
+from bayescraft.graphmodels import DGM
+import bayescraft.stats as bstats
 
 def names_to_str(g):
     result = nx.Graph()
@@ -75,5 +78,51 @@ class DiscreteModelGenDGM:
             cpd[node] = TableCPD(table, names)
         return cpd
 
+
 class ContinuousModelGenDGM:
-    pass
+    @staticmethod
+    def gaussian(G):
+        cpd = {}
+        for node in nx.topological_sort(G):
+            m = G.in_degree(node) + 1
+            cov = np.random.rand(m, m)
+            cov = np.dot(cov, cov.T)
+            d = MultivariateGaussianDistribution(np.zeros(m), cov)
+            cpd[node] = ParametricFunctionCPD(d, [node] + list(G.predecessors(node)))
+        return cpd
+
+    @staticmethod
+    def linear_gaussian(G, a_0=1, b_0=1):
+        cpd = {}
+        for node in nx.topological_sort(G):
+            m = G.in_degree(node) + 1
+            nig = bstats.normal_inverse_gamma(w_0=np.zeros(m), V_0=np.eye(m), a_0=a_0, b_0=b_0)
+            sample = nig.rvs()
+            variance = sample[-1]
+            w = sample[1:-1]
+            w0 = sample[0]
+            cpd[node] = ParametricFunctionCPD(LinearGaussianDistribution(w0, w, variance),
+                                              [node], list(G.predecessors(node)))
+        return cpd
+
+def dag_pack():
+    for n_var in [5, 10, 20, 30]:
+        yield AcyclicDiGraphGen.diamond(n_var)
+    for n_var in [5, 10, 20, 30]:
+        yield AcyclicDiGraphGen.star(n_var)
+    for p in [0.1, 0.2, 0.3, 0.4, 0.5, 0.9]:
+        for n_var in [5, 10, 20, 30]:
+            yield AcyclicDiGraphGen.random_gnr(n_var, p)
+    for p in [0.1, 0.2, 0.3, 0.4, 0.5, 0.9]:
+        for n_var in [5, 10, 20, 30]:
+            yield AcyclicDiGraphGen.random_erdos_renyi(n_var, p)
+
+def dgm_pack():
+    for dag in dag_pack():
+        dgm = DGM.from_graph(dag)
+        dgm.cpd = DiscreteModelGenDGM.dirichlet(dag.copy())
+        #yield dgm
+        dgm = DGM.from_graph(dag)
+        dgm.cpd = ContinuousModelGenDGM.linear_gaussian(dgm)
+        yield dgm
+

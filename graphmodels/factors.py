@@ -2,21 +2,21 @@ import numpy.random as rand
 from numpy import log, exp
 import itertools
 from itertools import product
+import pandas as pd
 
-from .utility import pretty_print_distr_dict, pretty_print_distr_table, pretty_draw, lmap
+from .utility import pretty_print_distr_dict, pretty_print_distr_table, pretty_draw, lmap, plot_distr
 from .distributions import *
 
 class Factor:
     def __call__(self, *args, kwargs):
         return 0.
 
-    def energy(self, **kwargs):
+    def energy(self, kwargs):
         """
         :param kwargs: argument values
         :return: negative log value of factor
         """
         return -log(self.__call__(kwargs))
-
 
 class TableFactor(Factor):
     """
@@ -146,6 +146,35 @@ class TableFactor(Factor):
             result *= n
         return result
 
+    @staticmethod
+    def mle(data):
+        headers = list(data.columns)
+        data = data.values
+        values = lmap(set, data.T)
+        shape = tuple(map(len, values))
+        table = np.zeros(*shape)
+        for point in data:
+            table[tuple(point)] += 1
+        return TableFactor(table, headers)
+
+    def sample(self, n_samples):
+        """
+        Sample data from the factor.
+        """
+        result = []
+        values = [self.table.shape[self.names.index(name)] for name in self.names]
+        norm_const = np.sum(np.ravel(self.table))
+        rands = rand.rand(n_samples) * norm_const
+        for sample in range(n_samples):
+            current = 0
+            for assignment in product(*lmap(range, values)):
+                current += self(assignment)
+                if current > rands[sample]:
+                    result.append(assignment)
+                    break
+        result = np.array(result)
+        return pd.DataFrame(data=result, columns=self.names)
+
 class TableCPD(TableFactor):
     """
     A CPD repesented by table, that is, a multidimensional array; indexes represent
@@ -156,8 +185,28 @@ class TableCPD(TableFactor):
 
     The difference between CPD and Factor classes is that values of CPD must sum to 1.
     """
-    def __init__(self, table, names):
-        super().__init__(table, names)
+    def __init__(self, table, var_names, cond_names):
+        super().__init__(table, cond_names + var_names)
+        self.var_names = var_names
+        self.cond_names = cond_names
+
+    @property
+    def var_dim(self):
+        return len(self.var_names)
+
+    def cond_dim(self):
+        return len(self.cond_names)
+
+    def _renormalize(self):
+        for x in product(self.table.shape[:len(self.cond_names)]):
+            constant = np.apply_over_axes(np.sum, self.table[tuple(x)],
+                                          list(range(len(self.cond_names), len(self.names))))
+            self.table[tuple(x)] = self.table[tuple(x)] / constant
+
+    def reduce(self, var_name, val):
+        super().reduce(var_name, val)
+        if var_name in self.var_names:
+            self._renormalize()
 
     @property
     def n_parameters(self):
@@ -167,35 +216,53 @@ class TableCPD(TableFactor):
         result = 1
         for n in self.table.shape:
             result *= n
-        return result - 1
+        return result - self.var_dim
 
     def sample(self, n_samples, observed=None):
         """
         Sample data from the CPD.
         """
         if observed is None:
-            observed = { }
-        result = { name : [] for name in self.names }
+            observed = pd.DataFrame()
         nonobserved = list(filter(lambda x: x not in observed, self.names))
+        result = { name : [] for name in nonobserved }
         values = [self.table.shape[self.names.index(name)] for name in nonobserved]
         rands = rand.rand(n_samples)
         for sample in range(n_samples):
             current = 0
             for assignment in product(*lmap(range, values)):
                 assignment_dict = { name : assignment[i] for i, name in enumerate(nonobserved) }
-                assignment_dict.update({key : val[sample] for key, val in observed.items()})
+                assignment_dict.update({key : observed[key][sample] for key in observed.columns })
                 current += self(assignment_dict)
 
             current_max = current
             current = 0
             for assignment in product(*lmap(range, values)):
                 assignment_dict = { name : assignment[i] for i, name in enumerate(nonobserved) }
-                assignment_dict.update({key : val[sample] for key, val in observed.items()})
+                assignment_dict.update({key : observed[key][sample] for key in observed.columns })
                 current += self(assignment_dict)
                 if current > rands[sample] * current_max:
-                    for key, val in assignment_dict.items():
+                    for key, val in zip(nonobserved, assignment):
                         result[key].append(val)
                     break
+        return pd.DataFrame(result)
+
+    @staticmethod
+    def mle(data, conditioned=None):
+        """
+        Maximum Likelihood Estimation (MLE).
+        """
+        if conditioned is None:
+            conditioned = []
+        headers = list(data.columns)
+        data = data.values
+        values = lmap(set, data.T)
+        shape = tuple(map(len, values))
+        table = np.zeros(*shape)
+        for point in data:
+            table[tuple(point)] += 1
+        result = TableCPD(table, [name for name in headers if name not in conditioned], conditioned)
+        result._renormalize()
         return result
 
 class DictFactor(Factor):
@@ -217,10 +284,6 @@ class DictFactor(Factor):
 
     def _repr_html_(self):
         return pretty_print_distr_dict(self.dict, names=self.names)._repr_html_()
-
-    @property
-    def domain(self):
-        values = [set() for var in self.dict]
 
 
 class FunctionFactor(Factor):
@@ -352,3 +415,51 @@ class ParametricFunctionFactor(Factor):
         :return: do the factor arguments contain that variable
         """
         return name in self.names
+
+    def sample(self, n_samples):
+        return pd.DataFrame(data=self.f.rvs(size=n_samples), columns=self.names)
+
+    @staticmethod
+    def mle(data, model):
+        header = list(data.columns)
+        f = model.mle(data.values)
+        return ParametricFunctionFactor(f, header)
+
+class ParametricFunctionCPD(ParametricFunctionFactor):
+    """
+    CPD represented as a Python function.
+    """
+    def __init__(self, f, var_names, cond_names):
+        super().__init__(f, var_names + cond_names)
+
+    def sample(self, n_samples, observed=None):
+        if observed is None:
+            observed = pd.DataFrame()
+        observed_names = list(observed.columns)
+        non_observed_names = [name for name in self.names if name not in observed_names]
+        result = []
+        for sample_i in range(n_samples):
+            assignment = [observed[name][sample_i] if name in observed_names else None for name in self.names]
+            result.append(np.atleast_1d(self.f.reduce(assignment).rvs()))
+        result = np.array(result)
+        return pd.DataFrame(data=result, columns=non_observed_names)
+
+    @staticmethod
+    def mle(data, model, conditioned=None):
+        if conditioned is None:
+            conditioned = []
+        header = list(data.columns)
+        variables = [name for name in header if name not in conditioned]
+        dataval = data[variables + conditioned].values
+        f = model.mle(dataval)
+        return ParametricFunctionCPD(f, variables, conditioned)
+
+    def plot(self):
+        plot_distr(self.f.pdf)
+
+class ParametricFunctionModel:
+    def __init__(self, model):
+        self.model = model
+
+    def mle(self, data, conditioned=None):
+        return ParametricFunctionCPD.mle(data, self.model, conditioned=conditioned)
