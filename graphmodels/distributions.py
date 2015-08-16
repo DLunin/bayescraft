@@ -307,16 +307,18 @@ class LinearGaussianDistribution:
         else:
             return self.canonical_form.reordered(order)
 
-
 class QuadraticCanonicalForm:
     def __init__(self, K, h, g):
         self.K = K
-        self.dim = len(h)
-        self.h = np.matrix(np.atleast_1d(h), copy=False).T
-        if self.h.shape == (1, 0):
-            self.h = self.h.reshape((0, 1))
+        self.h = np.matrix(np.atleast_1d(h), copy=False)
+        if self.h.shape[1] != 1 and self.h.shape[0] == 1:
+            self.h = self.h.T
         assert self.h.shape[1] == 1
         self.g = g
+
+    @property
+    def dim(self):
+        return len(self.h)
 
     def pdf(self, x):
         x = np.matrix(np.atleast_1d(x), copy=False).T
@@ -352,10 +354,14 @@ class QuadraticCanonicalForm:
 
         K = K_XX + M * K_YX
         h = h_x - M * h_y
+        assert np.all(np.linalg.eigvals(K_YY) > 0)
         g = self.g + 0.5 * (log(det(2*pi*K_YY_inv)) + h_y.T * K_YY_inv * h_y)
         return QuadraticCanonicalForm(K, h, g)
 
     def extended(self, n):
+        assert n >= 0
+        if n == 0:
+            return self
         dim = self.dim + n
         K = np.copy(self.K)
         h = np.copy(self.h)
@@ -368,4 +374,6 @@ class QuadraticCanonicalForm:
         return QuadraticCanonicalForm(self.K + other.K, self.h + other.h, self.g + other.g)
 
     def reordered(self, order):
+        assert len(order) == self.dim
         return QuadraticCanonicalForm(self.K[order][:, order], self.h[order], self.g)
+

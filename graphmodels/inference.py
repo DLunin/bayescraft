@@ -59,6 +59,7 @@ def sum_product(factors, query, ordering, evidence=None, build_induced_graph=Fal
             factors.add(factor_product)
     result = factors.pop()
     for i, factor in enumerate(factors):
+        assert set(factor.names) <= set(query)
         result = result * factor
 
     if build_induced_graph:

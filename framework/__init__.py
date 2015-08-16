@@ -1,0 +1,1 @@
+from .properties import lazy_property, LazyProperty, declare

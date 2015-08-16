@@ -363,6 +363,7 @@ class ParametricFunctionFactor(Factor):
     def __init__(self, f, names, **params):
         self.f = f
         self.names = list(names)
+        assert len(self.names) == self.f.dim
         self.params = params
 
     @property
@@ -371,7 +372,7 @@ class ParametricFunctionFactor(Factor):
 
     def __call__(self, kwargs):
         args = tuple([kwargs[name] for name in self.names])
-        return self.f(*args, **self.params)
+        return self.f.pdf(*args, **self.params)
 
     def factor(self):
         return self
@@ -397,6 +398,7 @@ class ParametricFunctionFactor(Factor):
         :return: None
         """
         idx = self.names.index(var_name)
+        del self.names[idx]
         self.f.reduce(idx, val)
 
     def marginalize(self, var_name):

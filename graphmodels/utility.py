@@ -105,7 +105,7 @@ def maximum_spanning_tree(graph, weight='weight'):
         graph.edge[i][j][weight] = -graph.edge[i][j][weight]
     return result
 
-def plot_distr_2d(distr, domain=(-25, 25)):
+def plot_distr_2d(distr, domain=(-25, 25), use_domain=False):
     """
     Smart 1d probability distribution plotter. Finds out the interval where the most of probability
     mass lies, and plots distribution on it (so you don't need to specify x-axis interval).
@@ -113,20 +113,23 @@ def plot_distr_2d(distr, domain=(-25, 25)):
     :param domain: a superset of plotting interval (to narrow search)
     :return: None
     """
-    def binary_search_quantiles(quantile, begin, end, prec):
-        while end - begin > prec:
-            sep = (begin + end) / 2.0
-            #print(sep, sp.integrate.quad(distr, -np.inf, sep)[0])
-            if sp.integrate.quad(distr, -np.inf, sep)[0] < quantile:
-                begin = sep
-            else:
-                end = sep
-        return (begin + end) / 2.0
+    if not use_domain:
+        def binary_search_quantiles(quantile, begin, end, prec):
+            while end - begin > prec:
+                sep = (begin + end) / 2.0
+                #print(sep, sp.integrate.quad(distr, -np.inf, sep)[0])
+                if sp.integrate.quad(distr, -np.inf, sep)[0] < quantile:
+                    begin = sep
+                else:
+                    end = sep
+            return (begin + end) / 2.0
 
-    alpha = 0.001
-    begin = binary_search_quantiles(alpha, domain[0], domain[1], 0.1)
-    end = binary_search_quantiles(1 - alpha, domain[0], domain[1], 0.1)
-    if abs(end - begin) < 1e-10:
+        alpha = 0.001
+        begin = binary_search_quantiles(alpha, domain[0], domain[1], 0.1)
+        end = binary_search_quantiles(1 - alpha, domain[0], domain[1], 0.1)
+        if abs(end - begin) < 1e-10:
+            begin, end = domain
+    else:
         begin, end = domain
     x = np.arange(begin, end, (end - begin) / 1000)
     try:
@@ -150,7 +153,7 @@ def plot_distr_3d(distr):
     ax.plot_surface(X, Y, Z, color='#DDDDDD')
     return None
 
-def plot_distr(distr, dim=1, domain=(-25, 25)):
+def plot_distr(distr, dim=1, domain=(-25, 25), use_domain=False):
     """
     Smart distribution plotting (whether 1d or 2d).
     :param distr: the distribution to plot
@@ -160,7 +163,7 @@ def plot_distr(distr, dim=1, domain=(-25, 25)):
     """
     if dim == 1:
         try:
-            plot_distr_2d(distr, domain=domain)
+            plot_distr_2d(distr, domain=domain, use_domain=use_domain)
         except:
             plot_distr_3d(distr)
     else:
