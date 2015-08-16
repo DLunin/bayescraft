@@ -29,6 +29,9 @@ def sum_product(factors, query, ordering, evidence=None, build_induced_graph=Fal
     :param build_induced_graph:
     :return: a sequence of factors with all but `query` variables marginalized
     """
+    from copy import deepcopy
+    ordering = list(filter(lambda x: x not in query, ordering))
+
     if evidence is None:
         evidence = dict()
 
@@ -38,7 +41,7 @@ def sum_product(factors, query, ordering, evidence=None, build_induced_graph=Fal
     if build_induced_graph:
         IG = UGM()
 
-    factors = set(factors)
+    factors = set(deepcopy(factors))
     for var in ordering:
         factor_product = None
         for factor in list(factors):
@@ -55,7 +58,7 @@ def sum_product(factors, query, ordering, evidence=None, build_induced_graph=Fal
         if not factor_product.empty():
             factors.add(factor_product)
     result = factors.pop()
-    for factor in factors:
+    for i, factor in enumerate(factors):
         result = result * factor
 
     if build_induced_graph:

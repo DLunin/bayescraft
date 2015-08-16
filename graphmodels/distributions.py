@@ -2,8 +2,8 @@ import numpy as np
 import scipy as sp
 from scipy import stats
 from itertools import chain
-from math import sqrt
-from numpy.linalg import pinv
+from math import log, pi, sqrt, exp
+from numpy.linalg import pinv, det
 
 """
 This code provides united representation of probability distributions (or functions in general),
@@ -232,18 +232,33 @@ class LinearGaussianDistribution:
         x = x[0]
         return stats.norm.pdf(x, loc=np.dot(u, self.w) + self.w0, scale=self.scale)
 
+    def __mul__(self, other):
+        if isinstance(other, LinearGaussianDistribution):
+            other = other.canonical_form
+        return self.canonical_form * other
+
     def rvs(self, size=1):
         assert self.dim == 1
         return stats.norm.rvs(size=size, loc=self.w0, scale=self.scale)
 
     def reduce(self, assignment):
-        assert assignment[0] is None
+        if assignment[0] is not None:
+            return self.canonical_form.reduce(assignment)
         reduced = [i - 1 for i in range(1, len(assignment)) if assignment[i] is not None]
         non_reduced = [i - 1 for i in range(1, len(assignment)) if assignment[i] is None]
         reduced_values = np.array([x for x in assignment if x is not None])
         w0 = self.w0 + np.dot(self.w[reduced], reduced_values)
         w = self.w[non_reduced]
         return LinearGaussianDistribution(w0, w, self.variance)
+
+    @property
+    def canonical_form(self):
+        w = np.matrix(np.hstack([[-1.], self.w]), copy=False).T
+        return QuadraticCanonicalForm(K=w*w.T/self.variance, h=-self.w0*w.T/self.variance,
+                                      g=(self.w0 * self.w0 / self.variance) - 0.5*log(2*pi*self.variance))
+
+    def marginalize(self, *args, **kwargs):
+        return self.canonical_form.marginalize(*args, **kwargs)
 
     @staticmethod
     def mle(data):
@@ -278,3 +293,79 @@ class LinearGaussianDistribution:
         else:
             variance = covs[0, 0]
         return LinearGaussianDistribution(w0, w, variance)
+
+    def extended(self, n):
+        dim = self.dim + n
+        w = np.copy(self.w)
+        w.resize((dim-1,))
+        return LinearGaussianDistribution(self.w0, w, self.variance)
+
+    def reordered(self, order):
+        if 0 not in order:
+            order = [x-1 for x in order]
+            return LinearGaussianDistribution(self.w0, self.w[order], self.variance)
+        else:
+            return self.canonical_form.reordered(order)
+
+
+class QuadraticCanonicalForm:
+    def __init__(self, K, h, g):
+        self.K = K
+        self.dim = len(h)
+        self.h = np.matrix(np.atleast_1d(h), copy=False).T
+        if self.h.shape == (1, 0):
+            self.h = self.h.reshape((0, 1))
+        assert self.h.shape[1] == 1
+        self.g = g
+
+    def pdf(self, x):
+        x = np.matrix(np.atleast_1d(x), copy=False).T
+        return exp(-0.5 * x.T * self.K * x + self.h.T * x + self.g)
+
+    def reduce(self, assignment):
+        y = np.array([x for x in assignment if x is not None])
+        y = np.matrix(y, copy=False).T
+        reduced_idx = [i for i, x in enumerate(assignment) if x is not None]
+        non_reduced_idx = [i for i, x in enumerate(assignment) if x is None]
+        h_x = self.h[non_reduced_idx]
+        h_y = self.h[reduced_idx]
+        K_XX = self.K[non_reduced_idx][:, non_reduced_idx]
+        K_YY = self.K[reduced_idx][:, reduced_idx]
+        K_XY = self.K[non_reduced_idx][:, reduced_idx]
+
+        h = h_x - K_XY * y
+        g = self.g + h_y.T * y - 0.5 * y.T * K_YY * y
+        return QuadraticCanonicalForm(K_XX, h, g)
+
+    def marginalize(self, idx):
+        reduced_idx = np.atleast_1d(idx)
+        non_reduced_idx = [i for i in range(self.dim) if i not in reduced_idx]
+        h_x = self.h[non_reduced_idx]
+        h_y = self.h[reduced_idx]
+        K_XX = self.K[non_reduced_idx][:, non_reduced_idx]
+        K_YY = self.K[reduced_idx][:, reduced_idx]
+        K_XY = self.K[non_reduced_idx][:, reduced_idx]
+        K_YX = self.K[reduced_idx][:, non_reduced_idx]
+
+        K_YY_inv = pinv(K_YY)
+        M = K_XY * K_YY_inv
+
+        K = K_XX + M * K_YX
+        h = h_x - M * h_y
+        g = self.g + 0.5 * (log(det(2*pi*K_YY_inv)) + h_y.T * K_YY_inv * h_y)
+        return QuadraticCanonicalForm(K, h, g)
+
+    def extended(self, n):
+        dim = self.dim + n
+        K = np.copy(self.K)
+        h = np.copy(self.h)
+        K.resize((dim, dim))
+        h.resize((dim,))
+        return QuadraticCanonicalForm(K, h, self.g)
+
+    def __mul__(self, other):
+        assert self.dim == other.dim
+        return QuadraticCanonicalForm(self.K + other.K, self.h + other.h, self.g + other.g)
+
+    def reordered(self, order):
+        return QuadraticCanonicalForm(self.K[order][:, order], self.h[order], self.g)

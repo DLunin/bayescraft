@@ -6,6 +6,7 @@ from itertools import product
 import random
 import math
 from functools import wraps
+import pandas as pd
 
 from .information import mutual_information
 
@@ -411,3 +412,21 @@ def colvec(arr):
     :return: column vector -- numpy array of shape (n, 1)
     """
     return np.transpose(np.atleast_2d(arr))
+
+def is_discrete(data):
+    return all(map(lambda x: float(x).is_integer(), data))
+
+def discretize(data, bins, force=True):
+    """
+    Binning continuous data array to get discrete data array.
+    :param data: target numpy array
+    :return: discretized array
+    """
+    if not is_discrete(data) or force:
+        ls = np.linspace(min(data), max(data), num=bins+1)[1:-1]
+        return np.digitize(data, ls)
+    else: return data
+
+def pandas_discretize(data, bins, all=False):
+    dv = np.transpose(np.asarray(lmap(lambda x: discretize(x, bins, force=all), np.transpose(data.values))))
+    return pd.DataFrame(data=dv, columns=data.columns.values)

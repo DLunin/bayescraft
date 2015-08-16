@@ -3,39 +3,34 @@ import numpy as np
 from numpy import log, exp
 from itertools import *
 import pandas as pd
+from types import GeneratorType
 
 from .utility import *
 from .factors import *
 from .distributions import *
-
+from bayescraft.framework import *
 
 class DGM(nx.DiGraph):
     """
     Directed Graphical Model
     """
-    def __init__(self):
+    def __init__(self, *args, **kwargs):
         super().__init__()
         self.cpd = { }
         self.model = { }
 
-    def reachable(self, source, observed, debug=False, G_reversed=None):
+    def reachable(self, source, observed, debug: bool=False) -> set:
         """
-        Finds a set of reachable (in the sense of d-separation) nodes in graph.
-        :param self: target graph
-        :param source: source node name
-        :param observed: a sequence of observed nodes
-        :param debug: debug mode on/off
-        :param G_reversed: you can provide a graph with reversed edges (for speedup)
-        :return: a set of reachable nodes
-        """
+            Finds a set of reachable (in the sense of d-separation) nodes in graph.
+            :param self: target graph
+            :param source: source node name
+            :param observed: a sequence of observed nodes
+            :param debug: debug mode on/off
+            :return: a set of reachable nodes
+            """
         V = nx.number_of_nodes(self)
-        if G_reversed is None:
-            GR = self.reverse()
-        else:
-            GR = G_reversed
-        A = set(sum([list(nx.dfs_preorder_nodes(GR, z)) for z in observed], []))
+        A = set(sum([list(nx.dfs_preorder_nodes(self.reverse(), z)) for z in observed], []))
         Z = observed
-
         L = [(source, 'up')]
         V = set()
         result = set()
@@ -60,33 +55,73 @@ class DGM(nx.DiGraph):
                         L.append((y, 'down'))
         result = set([x[0] for x in result])
         if debug:
-            pretty_draw(self, node_color = lambda node, attr: '#88DDFF' if node == source else
-                       ('#FFFF00' if node in observed else ('#00FF00' if node in result else '#DDDDDD')))
+            pretty_draw(self, node_color=lambda node, attr: '#88DDFF' if node == source else
+            ('#FFFF00' if node in observed else ('#00FF00' if node in result else '#DDDDDD')))
         return result - {source}
 
-    def is_covered(G, edge):
+    def is_covered(self, edge) -> bool:
         """
         Checks if the edge is covered.
-        :param G: graph
+        :param self: graph
         :param edge: edge to check
         :return: is edge covered
         """
         x, y = edge
-        return set(G.predecessors_iter(y)) - set(G.predecessors_iter(x)) == {x}
+        return set(self.predecessors_iter(y)) - set(self.predecessors_iter(x)) == {x}
 
-    def is_I_map(G1, G2, debug=False):
+    def is_I_map(self, other, debug: bool=False) -> bool:
         """
         Is G1 an I-map of G2?
         """
-        G2_rev = G2.reverse()
-        for x in G1.nodes():
-            pa = set(G1.predecessors(x))
-            non_descendants = set(G1.nodes()) - descendants(G1, x) - {x}
-            if set.intersection(G2.reachable(G2, x, pa, G_reversed=G2_rev), non_descendants - pa):
+        G2_rev = other.reverse()
+        for x in self.nodes():
+            pa = set(self.predecessors(x))
+            non_descendants = set(self.nodes()) - descendants(self, x) - {x}
+            if set.intersection(other.reachable(other, x, pa, G_reversed=G2_rev), non_descendants - pa):
                 if debug:
-                    print(x, pa, non_descendants - pa, G1.reachable(x, pa, G_reversed=G2_rev))
+                    print(x, pa, non_descendants - pa, self.reachable(x, pa))
                 return False
         return True
+
+    def is_I_equivalent(self, other, debug: bool=False) -> bool:
+        """
+        Check if two graphs are I-equivalent
+        :param self: first graph
+        :param other: second graph
+        :param debug: debug mode on/off
+        :return: are the graphs I-equivalent
+        """
+        if debug:
+            pretty_draw(self, node_size=lambda *args: 2000)
+            pretty_draw(other, node_size=lambda *args: 2000)
+
+        # same undirected skeleton
+        if not are_equal_graphs(self.to_undirected(), other.to_undirected()):
+            return False
+
+        # same immoralities
+        for x in self.nodes():
+            #print(x, G1.predecessors(x))
+            for p1, p2 in set.union(set(combinations(self.predecessors(x), r=2)),
+                                    set(combinations(other.predecessors(x), r=2))):
+                #print((p1, p2))
+                if self.has_edge(p1, p2) or self.has_edge(p2, p1):
+                    continue
+                if other.has_edge(p1, x) and other.has_edge(p2, x):
+                    continue
+                return False
+
+        # everything OK
+        return True
+
+    @property
+    def is_moral(self):
+        """
+        A graph is moral if it has no immoralities.
+        :param self: target graph
+        :return: is target graph moral
+        """
+        return len(list(self.immoralities)) == 0
 
     @property
     def immoralities(G):
@@ -98,7 +133,7 @@ class DGM(nx.DiGraph):
         return filter(lambda v: (not G.has_edge(v[1], v[2])) and (not G.has_edge(v[2], v[1])), G.v_structures)
 
     @property
-    def v_structures(G):
+    def v_structures(G) -> GeneratorType:
         """
         Iterate over all v-structures in a graph.
         :param G: target graph
@@ -108,54 +143,33 @@ class DGM(nx.DiGraph):
             for p1, p2 in combinations(G.predecessors(x), r=2):
                 yield x, p1, p2
 
-    plot = pretty_draw
-
-    @property
-    def factors(self):
-        result = []
-        for node, attr in self.nodes(data=True):
-            result.append(attr['CPD'])
+    def sample(self, n_samples) -> pd.DataFrame:
+        """
+        Sample data from DGM.
+        """
+        result = pd.DataFrame()
+        for node in nx.topological_sort(self):
+            parents = list(self.predecessors(node))
+            assignment = result[parents]
+            data_part = self.cpd[node].sample(n_samples=n_samples, observed=assignment)
+            result = pd.concat([result, data_part], axis=1)
         return result
 
-    def I_equivalent(G1, G2, debug=False):
-        """
-        Check if two graphs are I-equivalent
-        :param G1: first graph
-        :param G2: second graph
-        :param debug: debug mode on/off
-        :return: are the graphs I-equivalent
-        """
-        if debug:
-            pretty_draw(G1, node_size=lambda *args: 2000)
-            pretty_draw(G2, node_size=lambda *args: 2000)
+    def mle(self, data) -> dict:
+        cpd = { }
+        for node in nx.topological_sort(self):
+            parents = list(self.predecessors(node))
+            cpd[node] = self.model[node].mle(data[parents + [node]], conditioned=parents)
+        return cpd
 
-        # same undirected skeleton
-        if not are_equal_graphs(G1.to_undirected(), G2.to_undirected()):
-            return False
+    plot = pretty_draw
 
-        # same immoralities
-        for x in G1.nodes():
-            #print(x, G1.predecessors(x))
-            for p1, p2 in set.union(set(combinations(G1.predecessors(x), r=2)),
-                                    set(combinations(G2.predecessors(x), r=2))):
-                #print((p1, p2))
-                if G1.has_edge(p1, p2) or G1.has_edge(p2, p1):
-                    continue
-                if G2.has_edge(p1, x) and G2.has_edge(p2, x):
-                    continue
-                return False
-
-        # everything OK
-        return True
-
-    @property
-    def is_moral(G):
-        """
-        A graph is moral if it has no immoralities.
-        :param G: target graph
-        :return: is target graph moral
-        """
-        return len(list(G.immoralities)) == 0
+    # @property
+    # def factors(self):
+    #     result = []
+    #     for node, attr in self.nodes(data=True):
+    #         result.append(attr['CPD'])
+    #     return result
 
     @staticmethod
     def from_data(data, discretizing_bins=None):
@@ -181,24 +195,6 @@ class DGM(nx.DiGraph):
         result.add_edges_from(G.edges())
         return result
 
-    def sample(self, n_samples):
-        """
-        Sample data from DGM.
-        """
-        result = pd.DataFrame()
-        for node in nx.topological_sort(self):
-            parents = list(self.predecessors(node))
-            assignment = result[parents]
-            data_part = self.cpd[node].sample(n_samples=n_samples, observed=assignment)
-            result = pd.concat([result, data_part], axis=1)
-        return result
-
-    def mle(self, data):
-        cpd = { }
-        for node in nx.topological_sort(self):
-            parents = list(self.predecessors(node))
-            cpd[node] = self.model[node].mle(data[parents + [node]], conditioned=parents)
-        return cpd
 
 class UGM(nx.Graph):
     """
@@ -212,7 +208,7 @@ class UGM(nx.Graph):
     cliques = property(compose(lambda gen: lmap(tuple, gen), nx.find_cliques))
 
     @property
-    def factors(self):
+    def factors(self) -> list:
         return list(self.potential.keys())
 
     def _to_factor(self, key, obj):
@@ -225,14 +221,14 @@ class UGM(nx.Graph):
         return obj
 
     @property
-    def immoralities(G):
+    def immoralities(self) -> filter:
         """
         Iterate over all immoralities in an unoriented graph.
-        :param G: target graph
+        :param self: target graph
         :return: iterator over immoralities in form (node, parent1, parent2)
         """
-        return filter(lambda v: G.has_edge(v[0], v[1]) and G.has_edge(v[0], v[2]) and (not G.has_edge(v[1], v[2])),
-            combinations_with_replacement(G.nodes(), 3))
+        return filter(lambda v: self.has_edge(v[0], v[1]) and self.has_edge(v[0], v[2]) and (not self.has_edge(v[1], v[2])),
+            combinations_with_replacement(self.nodes(), 3))
 
     plot = pretty_draw
 
@@ -250,7 +246,7 @@ class UGM(nx.Graph):
             ugm.potential[tuple(factor)] = potential
         return ugm
 
-    def UGM_reduce(self, node, val):
+    def reduce(self, node, val):
         """
         Reduce a node in UGM
         :param node: node to be reduced
@@ -269,16 +265,16 @@ class UGM(nx.Graph):
         super(UGM, self).remove_node(node)
 
     @property
-    def factor_graph(G):
+    def factor_graph(self) -> nx.Graph:
         """
         Graph of factors of G: edge exists iff factors intersect.
-        :param G: target graph
+        :param self: target graph
         :return: graph of factors
         """
         fG = nx.Graph()
-        fG.add_nodes_from(G.nodes(), factor=False)
-        fG.add_nodes_from(G.factors, factor=True)
-        for f in G.factors:
+        fG.add_nodes_from(self.nodes(), factor=False)
+        fG.add_nodes_from(self.factors, factor=True)
+        for f in self.factors:
             fG.add_edges_from([(f, var) for var in f])
         return fG
 
@@ -294,7 +290,7 @@ class UGM(nx.Graph):
         return plot_factor_graph(self.factor_graph)
 
     @property
-    def moralize(self):
+    def moralize(self) -> nx.Graph:
         """
         Moralize an undirected graph: add edges so that all immoralities are converted to covered
         v-structures. Original graph is not modified, rather, a new graph is created.
@@ -309,13 +305,13 @@ class UGM(nx.Graph):
         return mG
 
     @property
-    def is_moral(G):
+    def is_moral(self) -> bool:
         """
         A graph is moral if it has no immoralities.
-        :param G: target graph
+        :param self: target graph
         :return: is target graph moral
         """
-        return len(list(G.immoralities)) == 0
+        return len(list(self.immoralities)) == 0
 
 class PDAG(nx.DiGraph):
     def __init__(self):

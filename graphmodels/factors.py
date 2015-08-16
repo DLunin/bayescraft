@@ -31,6 +31,9 @@ class TableFactor(Factor):
         self.table = np.array(table)
         self.names = names
 
+    def factor(self):
+        return self
+
     def __call__(self, kwargs):
         args = tuple([kwargs[name] for name in self.names])
         try:
@@ -189,19 +192,23 @@ class TableCPD(TableFactor):
         super().__init__(table, cond_names + var_names)
         self.var_names = var_names
         self.cond_names = cond_names
+        self._renormalize()
 
     @property
     def var_dim(self):
         return len(self.var_names)
 
+    @property
     def cond_dim(self):
         return len(self.cond_names)
 
     def _renormalize(self):
-        for x in product(self.table.shape[:len(self.cond_names)]):
-            constant = np.apply_over_axes(np.sum, self.table[tuple(x)],
-                                          list(range(len(self.cond_names), len(self.names))))
-            self.table[tuple(x)] = self.table[tuple(x)] / constant
+        for x in product(*lmap(range, self.table.shape[:self.cond_dim])):
+            constant = np.sum(self.table[tuple(x)])
+            if constant > 0:
+                self.table[tuple(x)] = self.table[tuple(x)] / constant
+            else:
+                self.table[tuple(x)] = 0
 
     def reduce(self, var_name, val):
         super().reduce(var_name, val)
@@ -256,14 +263,16 @@ class TableCPD(TableFactor):
             conditioned = []
         headers = list(data.columns)
         data = data.values
-        values = lmap(set, data.T)
-        shape = tuple(map(len, values))
-        table = np.zeros(*shape)
+        values = lmap(max, data.T)
+        shape = tuple(map(lambda x: x + 1, values))
+        table = np.zeros(shape)
         for point in data:
             table[tuple(point)] += 1
         result = TableCPD(table, [name for name in headers if name not in conditioned], conditioned)
-        result._renormalize()
         return result
+
+    def factor(self):
+        return TableFactor(self.table, self.names)
 
 class DictFactor(Factor):
     """
@@ -293,13 +302,17 @@ class FunctionFactor(Factor):
     def __init__(self, f, names):
         self.f = f
         self.names = list(names)
-        self.dim = len(self.names)
+
+    @property
+    def dim(self):
+        return len(self.names)
 
     def __call__(self, kwargs):
         args = tuple([kwargs[name] for name in self.names])
-        if self.dim is None:
-            self.dim = len(args)
         return self.f(*args)
+
+    def factor(self):
+        return self
 
     def reduce(self, var_name, val):
         """
@@ -350,14 +363,31 @@ class ParametricFunctionFactor(Factor):
     def __init__(self, f, names, **params):
         self.f = f
         self.names = list(names)
-        self.dim = len(self.names)
         self.params = params
+
+    @property
+    def dim(self):
+        return len(self.names)
 
     def __call__(self, kwargs):
         args = tuple([kwargs[name] for name in self.names])
-        if self.dim is None:
-            self.dim = len(args)
         return self.f(*args, **self.params)
+
+    def factor(self):
+        return self
+
+    def __mul__(self, other):
+        y = set(self.names).intersection(set(other.names))
+        x = list(set(self.names) - y)
+        z = list(set(other.names) - y)
+        x_idx = [i for i, x in enumerate(self.names) if x not in y]
+        y_idx_self = [i for i, x in enumerate(self.names) if x in y]
+        y_idx_other = [i for i, x in enumerate(other.names) if x in y]
+        z_idx = [i for i, z in enumerate(other.names) if z not in y]
+        other_ext_f = other.f.extended(len(x))
+        return ParametricFunctionFactor(self.f.reordered(x_idx + y_idx_self).extended(len(z)) * \
+                                        other_ext_f.reordered(list(range(len(z) + len(y), other_ext_f.dim)) + \
+                                                              y_idx_other + z_idx), x + list(y) + z)
 
     def reduce(self, var_name, val):
         """
@@ -366,15 +396,8 @@ class ParametricFunctionFactor(Factor):
         :param val: value to assign to reduced variable
         :return: None
         """
-        if var_name not in self.names:
-            return None
-        var = self.names.index(var_name)
-
-        def f(*args):
-            args.insert(var, val)
-            return self.f(*args)
-        self.f = f
-        self.names.pop(var)
+        idx = self.names.index(var_name)
+        self.f.reduce(idx, val)
 
     def marginalize(self, var_name):
         """
@@ -383,7 +406,7 @@ class ParametricFunctionFactor(Factor):
         :return: None
         """
         var = self.names.index(var_name)
-        self.f = self.f.integrate_along(var)
+        self.f = self.f.marginalize(var)
         self.names.pop(var)
 
     @property
@@ -425,12 +448,28 @@ class ParametricFunctionFactor(Factor):
         f = model.mle(data.values)
         return ParametricFunctionFactor(f, header)
 
+    def empty(self):
+        return len(self.names) == 0
+
 class ParametricFunctionCPD(ParametricFunctionFactor):
     """
     CPD represented as a Python function.
     """
     def __init__(self, f, var_names, cond_names):
         super().__init__(f, var_names + cond_names)
+
+    def factor(self):
+        return ParametricFunctionFactor(self.f, self.names)
+
+    def reduce(self, var_name, val):
+        """
+        Reduce a variable in factor
+        :param var_name: name of reduced variable
+        :param val: value to assign to reduced variable
+        :return: None
+        """
+        idx = self.names.index(var_name)
+        self.f.reduce(idx, val)
 
     def sample(self, n_samples, observed=None):
         if observed is None:
@@ -456,6 +495,7 @@ class ParametricFunctionCPD(ParametricFunctionFactor):
 
     def plot(self):
         plot_distr(self.f.pdf)
+
 
 class ParametricFunctionModel:
     def __init__(self, model):

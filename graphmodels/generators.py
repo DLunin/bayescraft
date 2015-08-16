@@ -74,8 +74,7 @@ class DiscreteModelGenDGM:
             dim = tuple([2] * m)
             table = stats.dirichlet(alpha=tuple([alpha] * (2 ** m))).rvs()[0]
             table = table.reshape(dim)
-            names = [node] + list(G.predecessors(node))
-            cpd[node] = TableCPD(table, names)
+            cpd[node] = TableCPD(table, [node], list(G.predecessors(node)))
         return cpd
 
 
@@ -106,23 +105,23 @@ class ContinuousModelGenDGM:
         return cpd
 
 def dag_pack():
-    for n_var in [5, 10, 20, 30]:
+    for n_var in [5, 10, 20]:
         yield AcyclicDiGraphGen.diamond(n_var)
-    for n_var in [5, 10, 20, 30]:
+    for n_var in [5, 10, 20]:
         yield AcyclicDiGraphGen.star(n_var)
     for p in [0.1, 0.2, 0.3, 0.4, 0.5, 0.9]:
-        for n_var in [5, 10, 20, 30]:
+        for n_var in [5, 10, 20]:
             yield AcyclicDiGraphGen.random_gnr(n_var, p)
     for p in [0.1, 0.2, 0.3, 0.4, 0.5, 0.9]:
-        for n_var in [5, 10, 20, 30]:
+        for n_var in [5, 10, 20]:
             yield AcyclicDiGraphGen.random_erdos_renyi(n_var, p)
 
 def dgm_pack():
     for dag in dag_pack():
         dgm = DGM.from_graph(dag)
         dgm.cpd = DiscreteModelGenDGM.dirichlet(dag.copy())
-        #yield dgm
+        dgm.model = { node : TableCPD for node in dgm.nodes() }
+        yield dgm
         dgm = DGM.from_graph(dag)
         dgm.cpd = ContinuousModelGenDGM.linear_gaussian(dgm)
-        yield dgm
-
+        #yield dgm
