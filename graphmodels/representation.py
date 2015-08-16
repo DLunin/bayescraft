@@ -4,7 +4,7 @@ from numpy import log, exp
 from itertools import *
 import pandas as pd
 
-from .utility import pretty_draw, are_equal_graphs, permutation_dict, compose, lmap, descendants, ancestors
+from .utility import *
 from .factors import *
 from .distributions import *
 
@@ -18,19 +18,19 @@ class DGM(nx.DiGraph):
         self.cpd = { }
         self.model = { }
 
-    def reachable(G, source, observed, debug=False, G_reversed=None):
+    def reachable(self, source, observed, debug=False, G_reversed=None):
         """
         Finds a set of reachable (in the sense of d-separation) nodes in graph.
-        :param G: target graph
+        :param self: target graph
         :param source: source node name
         :param observed: a sequence of observed nodes
         :param debug: debug mode on/off
         :param G_reversed: you can provide a graph with reversed edges (for speedup)
         :return: a set of reachable nodes
         """
-        V = nx.number_of_nodes(G)
+        V = nx.number_of_nodes(self)
         if G_reversed is None:
-            GR = G.reverse()
+            GR = self.reverse()
         else:
             GR = G_reversed
         A = set(sum([list(nx.dfs_preorder_nodes(GR, z)) for z in observed], []))
@@ -47,20 +47,20 @@ class DGM(nx.DiGraph):
                 result.add((x, d))
             V.add((x, d))
             if d == 'up' and x not in Z:
-                for y in G.predecessors_iter(x):
+                for y in self.predecessors_iter(x):
                     L.append((y, 'up'))
-                for y in G.successors_iter(x):
+                for y in self.successors_iter(x):
                     L.append((y, 'down'))
             elif d == 'down':
                 if x in A:
-                    for y in G.predecessors_iter(x):
+                    for y in self.predecessors_iter(x):
                         L.append((y, 'up'))
                 if x not in Z:
-                    for y in G.successors_iter(x):
+                    for y in self.successors_iter(x):
                         L.append((y, 'down'))
         result = set([x[0] for x in result])
         if debug:
-            pretty_draw(G, node_color = lambda node, attr: '#88DDFF' if node == source else
+            pretty_draw(self, node_color = lambda node, attr: '#88DDFF' if node == source else
                        ('#FFFF00' if node in observed else ('#00FF00' if node in result else '#DDDDDD')))
         return result - {source}
 
@@ -181,7 +181,10 @@ class DGM(nx.DiGraph):
         result.add_edges_from(G.edges())
         return result
 
-    def generate_data(self, n_samples):
+    def sample(self, n_samples):
+        """
+        Sample data from DGM.
+        """
         result = pd.DataFrame()
         for node in nx.topological_sort(self):
             parents = list(self.predecessors(node))
@@ -194,7 +197,7 @@ class DGM(nx.DiGraph):
         cpd = { }
         for node in nx.topological_sort(self):
             parents = list(self.predecessors(node))
-            cpd[node] = ParametricFunctionCPD.mle(data[parents + [node]], self.model[node], conditioned=parents)
+            cpd[node] = self.model[node].mle(data[parents + [node]], conditioned=parents)
         return cpd
 
 class UGM(nx.Graph):
@@ -411,20 +414,6 @@ def random_binary_ugm_distr(G):
 def random_binary_ugm(n=10, p=None):
     if p is None: p = log(n) / n
     return random_binary_ugm_distr(nx.erdos_renyi_graph(n=n, p=p))
-
-def discretize(data, bins):
-    """
-    Binning continuous data array to get discrete data array.
-    :param data: target numpy array
-    :return: discretized array
-    """
-    if not is_discrete(data):
-        ls = np.linspace(min(data), max(data), num=bins+1)[1:-1]
-        return np.digitize(data, ls)
-    else: return data
-
-def is_discrete(data):
-    return all(map(lambda x: float(x).is_integer(), data))
 
 def random_binary_dgm(n=10, p=0.2):
     G = nx.gnr_graph(n, p)
