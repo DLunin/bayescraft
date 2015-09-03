@@ -42,7 +42,6 @@ class CrossValidator:
         kf = KFold(len(self.data.values), n_folds=self.n_parts, shuffle=True)
         result = []
         for train_index, test_index in kf:
-            #print(train_index, test_index)
             train = self.data.iloc[train_index]
             test = self.data.iloc[test_index]
             target = test[target_columns]

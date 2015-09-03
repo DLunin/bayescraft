@@ -329,7 +329,7 @@ class StructureSearch:
         return G
 
 
-class StructureLearner:
+class LocalSearchStructureLearner:
     def __init__(self):
         pass
 
@@ -338,3 +338,18 @@ class StructureLearner:
         G = DGM()
         G.add_nodes_from(data.columns.values)
         return searcher(G, 100, do_bagging=False, taboo_len=10)
+
+class ChowLiuStructureLearner:
+    def __init__(self):
+        pass
+
+    def learn(self, data: pd.DataFrame, **options) -> DGM:
+        g = chow_liu(data.values)
+        header = data.columns.values
+        result = DGM()
+        result.add_nodes_from(header)
+        for u, v in g.edges():
+            if u > v:
+                u, v = v, u
+            result.add_edge(header[u], header[v])
+        return result
