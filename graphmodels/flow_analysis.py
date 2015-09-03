@@ -13,7 +13,6 @@ from sklearn.metrics import mutual_info_score
 from scipy.stats import gaussian_kde
 from mpl_toolkits.mplot3d import Axes3D
 from itertools import *
-from NPEET import mi
 from math import sqrt
 import math
 from itertools import repeat

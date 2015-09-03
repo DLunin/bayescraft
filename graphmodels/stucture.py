@@ -13,7 +13,7 @@ from sklearn.metrics import mutual_info_score
 from scipy.stats import gaussian_kde
 from mpl_toolkits.mplot3d import Axes3D
 from itertools import *
-from NPEET import mi
+#from NPEET import mi
 from math import sqrt
 import math
 from itertools import repeat
@@ -85,12 +85,13 @@ class BIC_score:
     BIC (Bayes Information Criterion) score of DGM graph. All terms which don't depend
     on the network structure are thrown out.
     """
-    def __init__(self, G, data, value_set_size_attr='|Val|'):
+    def __init__(self, G, data):
         self.G = G
         self.data = data
         self.cache = { }
         self.m = self.data.shape[0]
-        self.value_set_size_attr = value_set_size_attr
+        self.cardinality = { x : max(self.data[x]) + 1 for x in self.G.nodes() }
+        print(self.cardinality)
         self.value = sum([self.famscore(node) for node in self.G.nodes()])
 
     def famscore(self, node):
@@ -103,9 +104,9 @@ class BIC_score:
             """
             Number of free parameters in node CPD.
             """
-            result = self.G.node[node][self.value_set_size_attr]
+            result = self.cardinality[node]
             for parent in self.G.predecessors(node):
-                result *= self.G.node[parent][self.value_set_size_attr]
+                result *= self.cardinality[parent]
             return result - 1
 
         if node in self.cache:
@@ -261,7 +262,7 @@ class StructureSearch:
     """
     Class for performing local structure search.
     """
-    def __init__(self, data, scoring, operations):
+    def __init__(self, data: pd.DataFrame, scoring, operations: list):
         self.data = data
         self.scoring = scoring
         self.operations = operations
@@ -280,7 +281,12 @@ class StructureSearch:
 
         operations = list(map(lambda Op: Op(G, score), self.operations))
         opdata = sum([list(op()) for op in operations], [])
+
+        # operations_heap = []
+        # for i in range(len(opdata)):
+        #     operations_heap.append((-opdata[i][0].score(*opdata[i][1]), i))
         operations_heap = lmap(lambda i: (-opdata[i][0].score(*opdata[i][1]), i), range(len(opdata)))
+
         taboo = deque([-1 for i in range(taboo_len)])
 
         for n_iter in range(n_iterations):
@@ -321,3 +327,14 @@ class StructureSearch:
                     if op.is_affected(affects, s, t):
                         operations_heap[i] = -op.score(s, t), idx
         return G
+
+
+class StructureLearner:
+    def __init__(self):
+        pass
+
+    def learn(self, data: pd.DataFrame, **options) -> DGM:
+        searcher = StructureSearch(data, BIC_score, [EdgeAddOp, EdgeRemoveOp, EdgeReverseOp])
+        G = DGM()
+        G.add_nodes_from(data.columns.values)
+        return searcher(G, 100, do_bagging=False, taboo_len=10)

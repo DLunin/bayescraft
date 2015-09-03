@@ -19,6 +19,12 @@ class DGM(nx.DiGraph):
         self.cpd = { }
         self.model = { }
 
+    def factors(self):
+        result = []
+        for key, val in self.cpd.items():
+            result.append(val.factor())
+        return result
+
     def reachable(self, source, observed, debug: bool=False) -> set:
         """
             Finds a set of reachable (in the sense of d-separation) nodes in graph.
@@ -155,11 +161,15 @@ class DGM(nx.DiGraph):
             result = pd.concat([result, data_part], axis=1)
         return result
 
-    def mle(self, data) -> dict:
+    def mle(self, data: pd.DataFrame, values: dict=None) -> dict:
         cpd = { }
         for node in nx.topological_sort(self):
             parents = list(self.predecessors(node))
-            cpd[node] = self.model[node].mle(data[parents + [node]], conditioned=parents)
+            if values is not None:
+                current_values = [values[x] for x in parents + [node]]
+            else:
+                current_values = None
+            cpd[node] = self.model[node].mle(data[parents + [node]], conditioned=parents, values=current_values)
         return cpd
 
     plot = pretty_draw
@@ -208,8 +218,14 @@ class UGM(nx.Graph):
     cliques = property(compose(lambda gen: lmap(tuple, gen), nx.find_cliques))
 
     @property
-    def factors(self) -> list:
+    def factor_vars(self) -> list:
         return list(self.potential.keys())
+
+    def factors(self):
+        result = []
+        for key, val in self.potential.items():
+            result.append(val.factor())
+        return result
 
     def _to_factor(self, key, obj):
         if isinstance(obj, list) or isinstance(obj, np.ndarray):
@@ -273,8 +289,8 @@ class UGM(nx.Graph):
         """
         fG = nx.Graph()
         fG.add_nodes_from(self.nodes(), factor=False)
-        fG.add_nodes_from(self.factors, factor=True)
-        for f in self.factors:
+        fG.add_nodes_from(self.factor_vars, factor=True)
+        for f in self.factor_vars:
             fG.add_edges_from([(f, var) for var in f])
         return fG
 

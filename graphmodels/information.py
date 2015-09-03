@@ -1,6 +1,6 @@
 from scipy import stats
 from scipy.stats import gaussian_kde
-from NPEET import mi
+#from NPEET import mi
 from numpy import log, exp
 
 from .utility import *

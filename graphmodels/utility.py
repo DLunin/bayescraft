@@ -52,7 +52,7 @@ def extract_edge_attribute(graph, name, default=None):
 
 
 def pretty_draw(graph, node_color=lambda node, attr: '#DDDDDD',
-                edge_color=lambda node1, node2, attr: '#000000', node_size=lambda node, attr: 300):
+                edge_color=lambda node1, node2, attr: '#000000', node_size=lambda node, attr: 300, highres=False):
     """
     Draws a graph. You can specify colors of nodes, colors of edges and size of nodes via lambda
     functions.
@@ -62,7 +62,10 @@ def pretty_draw(graph, node_color=lambda node, attr: '#DDDDDD',
     :param node_size: lambda function mapping node name and its attributes to the desired size
     :return: None
     """
-    fig = plt.figure(figsize=(17, 6))
+    if highres:
+        fig = plt.figure(figsize=(100, 100))
+    else:
+        fig = plt.figure(figsize=(17, 6))
     plt.axis('off')
     if type(node_color) is str:
         node_colors = extract_node_attribute(graph, 'color', default='#DDDDDD')
@@ -296,7 +299,7 @@ def pretty_print_distr_table(table, names):
     t = ListTable()
     t.append(names + ['P'])
     for v in product(*lmap(compose(list, range), table.shape)):
-        t.append(list(v) + [str(table[v])[:5]])
+        t.append(list(v) + ["%0.3f" % table[v]])
     return t
 
 def pretty_print_distr_dict(d, names):
@@ -317,7 +320,7 @@ def pretty_print_distr_dict(d, names):
         items = reprsort(items)
 
     for v, p in items:
-        t.append(list(v) + [str(p)[:5]])
+        t.append(list(v) + ["%0.3f" % p])
     return t
 
 class permutation_dict(dict):
@@ -419,17 +422,33 @@ def colvec(arr):
 def is_discrete(data):
     return all(map(lambda x: float(x).is_integer(), data))
 
-def discretize(data, bins, force=True):
+def discretize(data, bins, force=True, exclude=None):
     """
     Binning continuous data array to get discrete data array.
     :param data: target numpy array
     :return: discretized array
     """
+    if exclude:
+        return data
     if not is_discrete(data) or force:
-        ls = np.linspace(min(data), max(data), num=bins+1)[1:-1]
-        return np.digitize(data, ls)
+        sdata = np.sort(data)
+        borders = np.zeros((bins + 1,))
+        for i in range(bins):
+            borders[i] = sdata[int((i / float(bins)) * len(data))]
+        borders[-1] = np.inf
+        borders[0] = -np.inf
+        assert len(borders) == bins + 1
+        result = np.zeros(data.shape)
+        for i in range(len(result)):
+            counter = 0
+            while data[i] > borders[counter]:
+                counter += 1
+            result[i] = counter-1
+            assert result[1] < bins
+        return result
     else: return data
 
-def pandas_discretize(data, bins, all=False):
-    dv = np.transpose(np.asarray(lmap(lambda x: discretize(x, bins, force=all), np.transpose(data.values))))
-    return pd.DataFrame(data=dv, columns=data.columns.values)
+def pandas_discretize(data, bins, all=False, exclude=set()):
+    dv = np.transpose(np.asarray(lmap(lambda x: discretize(x[0], bins, force=all, exclude=x[1] in exclude), zip(np.transpose(data.values), data.columns))))
+    result = pd.DataFrame(data=dv, columns=data.columns.values)
+    return result

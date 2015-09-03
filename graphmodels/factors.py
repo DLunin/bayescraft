@@ -18,6 +18,9 @@ class Factor:
         """
         return -log(self.__call__(kwargs))
 
+    def argmax_p(self) -> dict:
+        raise NotImplementedError()
+
 class TableFactor(Factor):
     """
     A factor repesented by table, that is, a multidimensional array; indexes represent
@@ -33,6 +36,16 @@ class TableFactor(Factor):
 
     def factor(self):
         return self
+
+    def argmax_p(self) -> dict:
+        shape = self.table.shape
+        result = dict(zip(self.names, [0] * len(shape)))
+        result_p = 0
+        for idx in itertools.product(*map(range, shape)):
+            if self.table[tuple(idx)] > result_p:
+                result_p = self.table[tuple(idx)]
+                result = dict(zip(self.names, idx))
+        return result
 
     def __call__(self, kwargs):
         args = tuple([kwargs[name] for name in self.names])
@@ -203,12 +216,15 @@ class TableCPD(TableFactor):
         return len(self.cond_names)
 
     def _renormalize(self):
+        subtable_size = 1.
+        for x in self.table.shape[self.cond_dim:]:
+            subtable_size *= x
         for x in product(*lmap(range, self.table.shape[:self.cond_dim])):
             constant = np.sum(self.table[tuple(x)])
             if constant > 0:
-                self.table[tuple(x)] = self.table[tuple(x)] / constant
+                self.table[tuple(x)] /= constant
             else:
-                self.table[tuple(x)] = 0
+                self.table[tuple(x)] = np.ones(self.table.shape[self.cond_dim:]) / subtable_size
 
     def reduce(self, var_name, val):
         super().reduce(var_name, val)
@@ -255,7 +271,7 @@ class TableCPD(TableFactor):
         return pd.DataFrame(result)
 
     @staticmethod
-    def mle(data, conditioned=None):
+    def mle(data, conditioned=None, values=None):
         """
         Maximum Likelihood Estimation (MLE).
         """
@@ -263,8 +279,9 @@ class TableCPD(TableFactor):
             conditioned = []
         headers = list(data.columns)
         data = data.values
-        values = lmap(max, data.T)
-        shape = tuple(map(lambda x: x + 1, values))
+        if values is None:
+            values = lmap(max, data.T)
+        shape = tuple(values)
         table = np.zeros(shape)
         for point in data:
             table[tuple(point)] += 1

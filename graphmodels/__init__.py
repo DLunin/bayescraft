@@ -7,3 +7,5 @@ from .information import *
 from .stucture import *
 from .generators import *
 from .flow_analysis import *
+from .learning import *
+from .pipeline import *

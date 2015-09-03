@@ -204,7 +204,7 @@ class MultivariateGaussianDistribution(MathDistribution):
         return MultivariateGaussianDistribution(np.array(mean.T), cov)
 
     def marginalize(self, marginalized):
-        non_marginalized = [i for i in range(self.dim)]
+        non_marginalized = [i for i in range(self.dim) if i not in marginalized]
         mean = self.mean[non_marginalized]
         cov = self.cov[non_marginalized][:, non_marginalized]
         return MultivariateGaussianDistribution(mean, cov)
