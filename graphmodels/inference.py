@@ -12,38 +12,45 @@ class Inferencer:
     def prob(self, variables: list, observed: dict) -> float:
         raise NotImplementedError()
 
+def complete_ordering(G, ordering):
+    result = ordering
+    for node in set.difference(set(G.nodes()), set(ordering)):
+        result.append(node)
+    return result
 
 class SumProductInferencer:
     def __init__(self):
         self.graphical_model = DGM()
         self.variables = []
-        self.ordering = SumProductInferencer._max_cardinality
+        self.ordering = None
 
     def fit(self, graphical_model, **options):
         self.graphical_model = graphical_model
         self.variables = list(self.graphical_model.nodes())
+        self.ordering = self.max_cardinality()
 
-    def _prob_single(self, variables: list, observed: dict) -> Factor:
+    def _prob_single(self, variables: list, observed: dict, **options) -> Factor:
+        ordering = options['ordering'] if 'ordering' in options else self.ordering
         return SumProductInferencer._sum_product(self.graphical_model.factors(),
                                                  variables,
-                                                 self.ordering(self.graphical_model),
+                                                 ordering,
                                                  evidence=observed)
 
-    def prob(self, variables: list, observed: pd.DataFrame) -> [Factor]:
+    def prob(self, variables: list, observed: pd.DataFrame, **options) -> [Factor]:
         result = []
         for point in observed.values:
             arg = dict(zip(observed.columns.values, point))
-            result.append(self._prob_single(variables, arg))
+            result.append(self._prob_single(variables, arg, **options))
         return result
 
-    def _predict_single(self, variables: list, observed: dict) -> dict:
-        return self._prob_single(variables, observed).argmax_p()
+    def _predict_single(self, variables: list, observed: dict, **options) -> dict:
+        return self._prob_single(variables, observed, **options).argmax_p()
 
-    def predict(self, variables: list, observed: pd.DataFrame) -> pd.DataFrame:
+    def predict(self, variables: list, observed: pd.DataFrame, **options) -> pd.DataFrame:
         dicts_list = []
         for point in observed.values:
             arg = dict(zip(observed.columns.values, point))
-            dicts_list.append(self._predict_single(variables, arg))
+            dicts_list.append(self._predict_single(variables, arg, **options))
         return pd.DataFrame(dicts_list)
 
     @staticmethod
@@ -131,13 +138,14 @@ class SumProductInferencer:
             factors.add(tuple(factor_product))
         return lmap(set, factors)
 
-    @staticmethod
-    def _max_cardinality(G):
+    def max_cardinality(self):
         """
         Max-cardinality variable ordering.
         :param G: target graph
         :return: node ordering -- a list of nodes
         """
+        G = self.graphical_model
+
         marked = set()
         not_marked = set(G.nodes())
 

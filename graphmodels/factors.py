@@ -94,7 +94,7 @@ class TableFactor(Factor):
         other_vars = list(set(other.names) - common_vars)
         common_vars = list(common_vars)
 
-        print('n_parameters', self.n_parameters, other.n_parameters)
+        #print('n_parameters', self.n_parameters, other.n_parameters)
 
         common_vars_idx_self = lmap(self.names.index, common_vars)
         common_vars_idx_other = lmap(other.names.index, common_vars)

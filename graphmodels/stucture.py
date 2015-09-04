@@ -353,3 +353,4 @@ class ChowLiuStructureLearner:
                 u, v = v, u
             result.add_edge(header[u], header[v])
         return result
+

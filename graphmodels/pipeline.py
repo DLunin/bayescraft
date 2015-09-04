@@ -25,11 +25,11 @@ class Pipeline:
         self.parameter_estimator.fit(self.graphical_model, data, **options)
         self.inferencer.fit(self.graphical_model, **options)
 
-    def prob(self, variables: list, observed: pd.DataFrame) -> [Factor]:
-        self.inferencer.prob(variables, observed)
+    def prob(self, variables: list, observed: pd.DataFrame, **options) -> [Factor]:
+        return self.inferencer.prob(variables, observed, **options)
 
-    def predict(self, variables: list, observed: pd.DataFrame) -> pd.DataFrame:
-        self.inferencer.predict(variables, observed)
+    def predict(self, variables: list, observed: pd.DataFrame, **options) -> pd.DataFrame:
+        return self.inferencer.predict(variables, observed, **options)
 
 
 class CrossValidator:
@@ -48,6 +48,7 @@ class CrossValidator:
             for col in target_columns:
                 del test[col]
             fit(train)
-            result.append(self.score(predict(test, target), target))
+            result.append(self.score(predict(target_columns, test), target))
         result = np.array(result)
         return result.mean(), result.std()
+
