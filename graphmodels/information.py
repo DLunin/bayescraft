@@ -192,3 +192,18 @@ def discrete_mutual_information(data_x, data_y):
         p_y = distr_y[tuple(y_part)]
         result += p_xy * (log(p_xy) - log(p_x) - log(p_y))
     return result
+
+
+class InfoCalculator:
+    def __init__(self, data):
+        self.data = data
+        self.discrete = { }
+        for var in self.data.columns:
+            self.discrete[var] = is_discrete(self.data[var].values)
+
+    def __call__(self, xvars, yvars):
+        xvars_d = [var for var in xvars if self.discrete[var]]
+        yvars_d = [var for var in yvars if self.discrete[var]]
+        xvars_c = [var for var in xvars if not self.discrete[var]]
+        yvars_d = [var for var in yvars if not self.discrete[var]]
+

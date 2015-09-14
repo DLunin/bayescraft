@@ -4,6 +4,7 @@ from itertools import combinations
 from .utility import *
 from .representation import UGM, DGM
 from .factors import Factor
+from .data_preparation import DiscreteDataPreparer
 
 class Inferencer:
     def fit(self, graphical_model, **options):
